@@ -1,5 +1,4 @@
 import { MediaContentType } from "@/types";
-
 import { folderDestination as folderDestinationStorage } from "@/utils/storage";
 import { sendMessage } from "webext-bridge/content-script";
 
@@ -17,6 +16,8 @@ const DownloadButton = ({
       mediaContainer,
       mediaContentType
     );
+
+    console.log("urls", urls);
 
     try {
       // Get the latest folder configuration from storage

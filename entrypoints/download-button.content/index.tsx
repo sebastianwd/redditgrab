@@ -4,7 +4,6 @@ import type { MediaContentType } from "~/types";
 import DownloadButton from "@/components/download-button";
 import { onMessage } from "webext-bridge/content-script";
 import { Selectors } from "@/utils/constants";
-import { ScanPageMediaMessage } from "@/types/shim";
 import { processedPostIds } from "@/utils/storage";
 import { compact } from "es-toolkit";
 
@@ -34,6 +33,7 @@ export default defineContentScript({
       const hasMultipleImages = element.querySelector(
         Selectors.GALLERY_CAROUSEL
       );
+      const hasRedGifs = element.querySelector(Selectors.REDGIFS_EMBED);
 
       if (hasVideo)
         return {
@@ -49,6 +49,12 @@ export default defineContentScript({
         return {
           type: "multiple-images",
           element: hasMultipleImages,
+        };
+      }
+      if (hasRedGifs) {
+        return {
+          type: "video",
+          element: hasRedGifs,
         };
       }
 

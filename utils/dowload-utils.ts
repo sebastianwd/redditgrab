@@ -1,3 +1,38 @@
+// Function to extract RedGIFs m3u8 URL from iframe
+export const getRedGifsUrl = (mediaElement: Element): string | null => {
+  // Check if the element itself is a shreddit-embed
+  let embed: Element | null = null;
+
+  if (mediaElement.tagName.toLowerCase() === "shreddit-embed") {
+    embed = mediaElement;
+  } else {
+    // Look for shreddit-embed within the element
+    embed = mediaElement.querySelector("shreddit-embed");
+  }
+
+  if (!embed) return null;
+
+  // Check if it's a RedGIFs embed
+  const providerName = embed.getAttribute("providername");
+  if (providerName !== "RedGIFs") return null;
+
+  // Extract the HTML content and parse the iframe src
+  const htmlContent = embed.getAttribute("html");
+  if (!htmlContent) return null;
+
+  // Parse the iframe src from the HTML content
+  const iframeMatch = htmlContent.match(
+    /src="([^"]*redgifs\.com\/ifr\/([^"?]+))/
+  );
+  if (iframeMatch && iframeMatch[2]) {
+    const redgifsId = iframeMatch[2];
+    // Convert to direct m3u8 stream URL
+    return `https://api.redgifs.com/v2/gifs/${redgifsId}/hd.m3u8`;
+  }
+
+  return null;
+};
+
 export function getSingleImageUrl(mediaElement: Element) {
   // Try hidden zoomable image (original full-res)
   const zoomable = mediaElement.querySelector<HTMLImageElement>(
@@ -102,9 +137,17 @@ export async function downloadVideo(
     logger.log("Downloading video:", url);
 
     if (url.includes(".m3u8")) {
-      const hlsUrl = await getHLSVideoUrl(url);
-      logger.log("hlsUrl", hlsUrl);
-      url = hlsUrl;
+      // Check if it's a RedGIFs HLS stream
+      if (url.includes("api.redgifs.com")) {
+        const hlsUrl = await getRedGifsHLSVideoUrl(url);
+        logger.log("RedGIFs complete video URL:", hlsUrl);
+        url = hlsUrl;
+      } else {
+        // Reddit HLS stream
+        const hlsUrl = await getHLSVideoUrl(url);
+        logger.log("Reddit hlsUrl", hlsUrl);
+        url = hlsUrl;
+      }
     }
 
     // Get filename pattern from storage
@@ -128,6 +171,159 @@ export async function downloadVideo(
   } catch (err) {
     logger.error("Failed to parse packaged-media-json:", err);
   }
+}
+
+// RedGIFs HLS downloader - manually download segments for FFmpeg.wasm
+export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
+  try {
+    logger.log("Processing RedGIFs HLS with manual segment download:", m3u8Url);
+
+    const ffmpeg = await createFFmpeg();
+
+    // Download and parse the m3u8 playlist
+    const response = await fetch(m3u8Url);
+    const playlistContent = await response.text();
+
+    logger.log("playlistContent", playlistContent);
+
+    // Parse segments and init segment manually since FFmpeg.wasm doesn't support HTTPS
+    const { initSegment, segments } = parseRedGifsPlaylist(playlistContent);
+
+    logger.log("Found segments:", segments.length);
+    logger.log("Init segment:", initSegment);
+
+    const segmentFiles = [];
+
+    // Download initialization segment if present
+    if (initSegment) {
+      const initData = await downloadSegmentWithByteRange(
+        initSegment.uri,
+        initSegment.byteRange
+      );
+      await ffmpeg.writeFile("init.m4s", initData);
+      segmentFiles.push("init.m4s");
+    }
+
+    // Download all video segments
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const segmentData = await downloadSegmentWithByteRange(
+        segment.uri,
+        segment.byteRange
+      );
+      const filename = `segment_${i.toString().padStart(3, "0")}.m4s`;
+      await ffmpeg.writeFile(filename, segmentData);
+      segmentFiles.push(filename);
+    }
+
+    // For MP4 segments, we need to use binary concatenation, not the concat demuxer
+    // Step 1: Concatenate all segments into one file
+    let allSegments = new Uint8Array(0);
+
+    for (const filename of segmentFiles) {
+      const segmentData = await ffmpeg.readFile(filename);
+      const newData = new Uint8Array(allSegments.length + segmentData.length);
+      newData.set(allSegments);
+      newData.set(segmentData as ArrayLike<number>, allSegments.length);
+      allSegments = newData;
+    }
+
+    // Write the concatenated segments
+    await ffmpeg.writeFile("concatenated.m4s", allSegments);
+
+    // Step 1: Convert concatenated segments to MKV
+    await ffmpeg.exec(["-i", "concatenated.m4s", "-c", "copy", "live.mkv"]);
+
+    // Step 2: Convert MKV to MP4
+    await ffmpeg.exec(["-i", "live.mkv", "-codec", "copy", "live.mp4"]);
+
+    // Read the final video file
+    const finalVideo = await ffmpeg.readFile("live.mp4");
+
+    // Clean up all files
+    const filesToClean = [
+      ...segmentFiles,
+      "concatenated.m4s",
+      "live.mkv",
+      "live.mp4",
+    ];
+    for (const file of filesToClean) {
+      try {
+        await ffmpeg.deleteFile(file);
+      } catch (e) {
+        // Ignore deletion errors
+      }
+    }
+
+    // Create blob URL for download
+    const blob = new Blob([finalVideo], { type: "video/mp4" });
+    const blobUrl = URL.createObjectURL(blob);
+
+    logger.log("RedGIFs video processed successfully:", blobUrl);
+    return blobUrl;
+  } catch (error) {
+    logger.error("Error processing RedGIFs HLS:", error);
+    throw error;
+  }
+}
+
+// Parse RedGIFs playlist to extract segments with byte ranges
+function parseRedGifsPlaylist(playlistText: string) {
+  const lines = playlistText.split("\n").map((line) => line.trim());
+  const segments = [];
+  let initSegment = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.startsWith("#EXT-X-MAP:")) {
+      // Extract initialization segment
+      const uriMatch = line.match(/URI="([^"]+)"/);
+      const byteRangeMatch = line.match(/BYTERANGE="([^"]+)"/);
+
+      if (uriMatch && byteRangeMatch) {
+        initSegment = {
+          uri: uriMatch[1],
+          byteRange: byteRangeMatch[1],
+        };
+      }
+    } else if (line.startsWith("#EXT-X-BYTERANGE:")) {
+      // Store byte range for next segment
+      const byteRange = line.replace("#EXT-X-BYTERANGE:", "");
+      if (i + 1 < lines.length && lines[i + 1].startsWith("https://")) {
+        segments.push({
+          uri: lines[i + 1],
+          byteRange: byteRange,
+        });
+        i++; // Skip the next line since we processed it
+      }
+    }
+  }
+
+  return { initSegment, segments };
+}
+
+// Download segment with byte range
+async function downloadSegmentWithByteRange(
+  url: string,
+  byteRange: string
+): Promise<Uint8Array> {
+  const [length, offset] = byteRange.split("@").map(Number);
+  const endByte = offset + length - 1;
+
+  const response = await fetch(url, {
+    headers: {
+      Range: `bytes=${offset}-${endByte}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download segment: ${response.status} ${response.statusText}`
+    );
+  }
+
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 export async function getHLSVideoUrl(m3u8Url: string) {
@@ -233,12 +429,27 @@ const getHighestQualityHLS = async (m3u8Url: string) => {
 export async function getVideoUrl(mediaElement: Element) {
   console.log("getting video url for", mediaElement);
 
+  // Check for RedGIFs first
+  const redGifsUrl = getRedGifsUrl(mediaElement);
+  if (redGifsUrl) {
+    console.log("found redgifs url", redGifsUrl);
+    return redGifsUrl;
+  }
+
   // First check if there's a direct m3u8 URL (HLS stream)
   const sourceUrl = mediaElement.getAttribute("src");
   if (sourceUrl && sourceUrl.includes(".m3u8")) {
-    const url = await getHighestQualityHLS(sourceUrl);
-    console.log("found m3u8 url", url);
-    return url;
+    // Check if it's RedGIFs HLS
+    if (sourceUrl.includes("api.redgifs.com")) {
+      const url = await getRedGifsHLSVideoUrl(sourceUrl);
+      console.log("found redgifs complete m3u8 url", url);
+      return url;
+    } else {
+      // Reddit HLS
+      const url = await getHighestQualityHLS(sourceUrl);
+      console.log("found reddit m3u8 url", url);
+      return url;
+    }
   }
 
   const packagedMedia = mediaElement.getAttribute("packaged-media-json");
@@ -260,38 +471,4 @@ export async function getVideoUrl(mediaElement: Element) {
   );
 
   return best.source.url;
-}
-
-export function getSubredditNameFromContainer(container: Element): string {
-  try {
-    // First try to find the subreddit name anchor tag within the container
-    const subredditAnchor = container.querySelector(
-      'a[data-testid="subreddit-name"]'
-    );
-
-    logger.log("subredditAnchor", subredditAnchor);
-    if (subredditAnchor) {
-      const span = subredditAnchor.querySelector(":scope > span");
-      if (span && span.textContent) {
-        const subredditName = span.textContent.trim();
-        return subredditName.replace(/^r\//, "");
-      }
-    }
-
-    // Fallback: extract subreddit from URL when we're on a subreddit page
-    const currentUrl = window.location.href;
-    const subredditMatch = currentUrl.match(/\/r\/([^\/]+)/);
-    if (subredditMatch) {
-      logger.log("Extracted subreddit from URL:", subredditMatch[1]);
-      return subredditMatch[1];
-    }
-
-    logger.warn(
-      "Could not determine subreddit name, falling back to 'unknown'"
-    );
-    return "unknown";
-  } catch (error) {
-    console.error("Failed to get subreddit name from container:", error);
-    return "unknown";
-  }
 }

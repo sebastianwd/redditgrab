@@ -2,10 +2,6 @@ import type { MediaContentType } from "~/types";
 import { onMessage, sendMessage } from "webext-bridge/background";
 
 export default defineBackground(() => {
-  onMessage("START_MASS_SCRAPE", async (message) => {
-    console.log("Starting mass scraping:", message);
-  });
-
   onMessage("DOWNLOAD_REQUEST", async ({ data }) => {
     try {
       await handleDownloadRequest(data);
@@ -15,8 +11,6 @@ export default defineBackground(() => {
       return { success: false, message: (error as Error).message };
     }
   });
-
-  console.log("Hello background!", { id: browser.runtime.id });
 
   // Handle extension icon click to toggle sidebar
   const handleIconClick = async (tab: Browser.tabs.Tab) => {
@@ -68,7 +62,7 @@ async function handleDownloadRequest(data: {
   folderDestination?: string;
   subredditName?: string;
 }) {
-  console.log("Processing download request:", data);
+  console.log("Processing download request22:", data);
 
   // Get the current active tab to access the page content
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -83,8 +77,6 @@ async function handleDownloadRequest(data: {
   // - Download files using browser.downloads.download()
   // - Store download history in storage
 
-  console.log("data.mediaContentType", data.mediaContentType);
-
   const folderDestination = data.folderDestination || "Reddit Downloads";
   const subredditName = data.subredditName || "unknown";
 
@@ -96,6 +88,7 @@ async function handleDownloadRequest(data: {
   }
 
   if (data.mediaContentType === "video") {
+    console.log("downloading video", data.urls[0]);
     await downloadVideo(data.urls[0], folderDestination, subredditName);
   }
 

@@ -18,6 +18,7 @@
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@ffmpeg/util": "^0.12.2",
     "es-toolkit": "^1.39.10",
+    "m3u8-parser": "^7.2.0",
     "react": "19.1.1",
     "react-dom": "19.1.1",
     "webext-bridge": "^6.0.1"

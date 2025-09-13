@@ -18,7 +18,12 @@ export default defineConfig({
       "scripting",
       "tabs", // Needed for querying active tab
     ],
-    host_permissions: ["*://*.reddit.com/*", "*://*.redd.it/*"],
+    host_permissions: [
+      "*://*.reddit.com/*",
+      "*://*.redd.it/*",
+      "*://*.redgifs.com/*",
+      "*://api.redgifs.com/*",
+    ],
     content_security_policy: {
       extension_pages:
         "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
