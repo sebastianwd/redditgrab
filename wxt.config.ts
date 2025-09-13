@@ -1,0 +1,47 @@
+import { defineConfig, WxtViteConfig } from "wxt";
+import tailwindcss from "@tailwindcss/vite";
+import wasm from "vite-plugin-wasm";
+import topLevelAwait from "vite-plugin-top-level-await";
+
+// See https://wxt.dev/api/config.html
+export default defineConfig({
+  modules: ["@wxt-dev/module-react"],
+  manifest: {
+    name: "Reddit Media Downloader",
+    description: "Download media posts from Reddit subreddit feeds",
+    version: "1.0.0",
+    permissions: [
+      "webRequest",
+      "downloads",
+      "activeTab",
+      "storage",
+      "scripting",
+    ],
+    host_permissions: ["*://*.reddit.com/*", "*://*.redd.it/*"],
+    content_security_policy: {
+      extension_pages:
+        "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
+      sandbox:
+        "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; child-src 'self';",
+    },
+    web_accessible_resources: [
+      {
+        matches: ["<all_urls>"],
+        resources: ["ffmpeg/*"],
+      },
+    ],
+  },
+  vite: () =>
+    ({
+      plugins: [tailwindcss(), wasm(), topLevelAwait()],
+      optimizeDeps: {
+        exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+      },
+      server: {
+        headers: {
+          "Cross-Origin-Opener-Policy": "same-origin",
+          "Cross-Origin-Embedder-Policy": "require-corp",
+        },
+      },
+    } as WxtViteConfig),
+});
