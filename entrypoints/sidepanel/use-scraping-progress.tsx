@@ -4,6 +4,7 @@ export const useScrapingProgress = () => {
   const [scrapingStatus, setScrapingStatus] = useState({
     isScraping: false,
     downloadedCount: 0,
+    totalPostsFound: 0,
     currentBatchCount: 0,
     currentPostId: null as string | null,
     currentPostInfo: null as {
@@ -14,11 +15,18 @@ export const useScrapingProgress = () => {
   });
 
   const startScraping = () => {
-    setScrapingStatus({ ...scrapingStatus, isScraping: true });
+    setScrapingStatus((prev) => ({
+      ...prev,
+      isScraping: true,
+      downloadedCount: 0,
+      totalPostsFound: 0,
+      currentBatchCount: 0,
+      currentPostInfo: null,
+    }));
   };
 
   const stopScraping = () => {
-    setScrapingStatus({ ...scrapingStatus, isScraping: false });
+    setScrapingStatus((prev) => ({ ...prev, isScraping: false }));
   };
 
   const setCurrentBatchCount = (currentBatchCount: number) => {
@@ -29,6 +37,13 @@ export const useScrapingProgress = () => {
     setScrapingStatus((prev) => ({
       ...prev,
       downloadedCount: prev.downloadedCount + 1,
+    }));
+  };
+
+  const addToTotalPostsFound = (count: number) => {
+    setScrapingStatus((prev) => ({
+      ...prev,
+      totalPostsFound: prev.totalPostsFound + count,
     }));
   };
 
@@ -47,6 +62,7 @@ export const useScrapingProgress = () => {
     stopScraping,
     setCurrentBatchCount,
     incrementDownloadCount,
+    addToTotalPostsFound,
     setCurrentPostInfo,
   };
 };

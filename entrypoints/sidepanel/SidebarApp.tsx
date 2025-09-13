@@ -5,7 +5,7 @@ import {
 } from "@/utils/storage";
 import { debounce } from "es-toolkit";
 import { sendMessage } from "webext-bridge/popup";
-import { useScrapingProgress } from "@/entrypoints/popup/use-scraping-progress";
+import { useScrapingProgress } from "./use-scraping-progress";
 import { processedPostIds } from "@/utils/storage";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
@@ -18,7 +18,9 @@ const debouncedSaveFilename = debounce(async (value: string) => {
   await filenamePatternStorage.setValue(value);
 }, 500);
 
-function App() {
+function SidebarApp() {
+  console.log("SidebarApp component rendering...");
+
   const [folderDestination, setFolderDestination] = useState(
     "Reddit Downloads/{subreddit}"
   );
@@ -48,6 +50,7 @@ function App() {
     stopScraping,
     setCurrentBatchCount,
     incrementDownloadCount,
+    addToTotalPostsFound,
     setCurrentPostInfo,
   } = useScrapingProgress();
 
@@ -79,7 +82,7 @@ function App() {
       startScraping();
       shouldContinueProcessingRef.current = true;
 
-      console.log("Starting mass scraping");
+      console.log("Starting mass scraping from sidebar");
 
       const processPage = async () => {
         // Ask content script to scan for media using webext-bridge
@@ -103,6 +106,7 @@ function App() {
 
         // Update progress tracking
         setCurrentBatchCount(mediaUrls.length);
+        addToTotalPostsFound(mediaUrls.length);
 
         // Process downloads similar to download-button.tsx
         for (let i = 0; i < mediaUrls.length; i++) {
@@ -147,16 +151,17 @@ function App() {
             }
 
             // Send download request to background script
-            const downloadResponse = await browser.runtime.sendMessage({
-              type: "DOWNLOAD_REQUEST",
-              data: {
+            const downloadResponse = await sendMessage(
+              "DOWNLOAD_REQUEST",
+              {
                 timestamp: Date.now(),
                 mediaContentType: mediaItem.type,
                 urls: mediaItem.urls,
                 folderDestination: finalFolderDestination,
                 subredditName: mediaItem.subredditName,
               },
-            });
+              "background"
+            );
 
             if (downloadResponse?.success) {
               console.log(`Download ${i + 1} started successfully`);
@@ -207,16 +212,20 @@ function App() {
               }
             }, 2000);
           } else {
-            // No new posts found, wait longer before checking again
+            console.log("No new posts found, scrolling to load more...");
+            await sendMessage(
+              "SCROLL_TO_LOAD_MORE",
+              undefined,
+              `content-script@${tab.id}`
+            );
             console.log(
-              "No new posts found, scheduling next check in 5 seconds..."
+              "Scrolled to load more posts, checking again in 3 seconds..."
             );
             setTimeout(() => {
               if (shouldContinueProcessingRef.current) {
-                console.log("No new posts found, checking again...");
                 processPage();
               }
-            }, 5000);
+            }, 3000);
           }
         } else {
           console.log("Processing stopped by user");
@@ -253,13 +262,16 @@ function App() {
   };
 
   return (
-    <div className="w-96 p-6 bg-gradient-to-br from-gray-50 to-white border border-gray-200 rounded-lg shadow-lg">
+    <div
+      className="w-full h-full min-h-screen p-4 bg-gradient-to-br from-gray-50 to-white"
+      style={{ minWidth: "300px" }}
+    >
       {/* Header */}
-      <div className="text-center mb-8">
-        <div className="w-12 h-12 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-3">
+      <div className="text-center mb-6">
+        <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-2">
           <svg
-            width="24"
-            height="24"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -271,48 +283,47 @@ function App() {
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">
+        <h1 className="text-lg font-bold text-gray-800 mb-1">
           Reddit Downloader
         </h1>
+        <p className="text-xs text-gray-500">
+          Mass download images and videos from Reddit
+        </p>
       </div>
 
       {/* Settings Section */}
-      <div className="space-y-6 mb-8">
+      <div className="space-y-4 mb-6">
         {/* Folder Destination */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Download Folder
           </label>
           <input
             type="text"
             value={folderDestination}
             onChange={(e) => handleFolderDestinationChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
-            placeholder="Enter folder name (e.g., Reddit Downloads)"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
+            placeholder="Enter folder name"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Files will be saved to your Downloads folder with this subfolder
-            name
-            <br />
             Available variables: {"{subreddit}"}
           </p>
         </div>
 
         {/* Filename Pattern */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Filename Pattern
           </label>
           <input
             type="text"
             value={filenamePattern}
             onChange={(e) => handleFilenamePatternChange(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
             placeholder="{subreddit}_{timestamp}_{filename}"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Available variables: {"{subreddit}"}, {"{timestamp}"},{" "}
-            {"{filename}"}
+            Available: {"{subreddit}"}, {"{timestamp}"}, {"{filename}"}
           </p>
         </div>
       </div>
@@ -322,11 +333,11 @@ function App() {
         {!scrapingStatus.isScraping ? (
           <button
             onClick={handleMassScrape}
-            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+            className="w-full bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-semibold py-2.5 px-4 rounded transition-all duration-200 flex items-center justify-center gap-2 text-sm shadow-md hover:shadow-lg"
           >
             <svg
-              width="20"
-              height="20"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -341,11 +352,11 @@ function App() {
         ) : (
           <button
             onClick={handleStopScraping}
-            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg"
+            className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2.5 px-4 rounded transition-all duration-200 flex items-center justify-center gap-2 text-sm shadow-md hover:shadow-lg"
           >
             <svg
-              width="20"
-              height="20"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -359,17 +370,17 @@ function App() {
 
         {/* Progress Display */}
         {scrapingStatus.isScraping && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="bg-blue-50 border border-blue-200 rounded p-3">
             <div className="flex justify-between items-center mb-2">
               <span className="text-sm font-medium text-blue-800">
                 Progress: {scrapingStatus.downloadedCount}/
-                {scrapingStatus.currentBatchCount}
+                {scrapingStatus.totalPostsFound}
               </span>
               <span className="text-xs text-blue-600">
-                {scrapingStatus.currentBatchCount > 0
+                {scrapingStatus.totalPostsFound > 0
                   ? Math.round(
                       (scrapingStatus.downloadedCount /
-                        scrapingStatus.currentBatchCount) *
+                        scrapingStatus.totalPostsFound) *
                         100
                     )
                   : 0}
@@ -381,9 +392,9 @@ function App() {
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{
                   width: `${
-                    scrapingStatus.currentBatchCount > 0
+                    scrapingStatus.totalPostsFound > 0
                       ? (scrapingStatus.downloadedCount /
-                          scrapingStatus.currentBatchCount) *
+                          scrapingStatus.totalPostsFound) *
                         100
                       : 0
                   }%`,
@@ -403,8 +414,8 @@ function App() {
       </div>
 
       {/* Status Info */}
-      <div className="mt-4 text-center">
-        <p className="text-xs text-gray-500">
+      <div className="mt-6 text-center">
+        <p className="text-xs text-gray-500 mb-2">
           {scrapingStatus.isScraping
             ? "Auto-scrolling and downloading media posts..."
             : "This will auto-scroll and download all media on the page"}
@@ -414,7 +425,7 @@ function App() {
         {!scrapingStatus.isScraping && (
           <button
             onClick={handleClearProcessedPosts}
-            className="mt-3 text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
+            className="text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
           >
             Clear processed posts history
           </button>
@@ -424,4 +435,4 @@ function App() {
   );
 }
 
-export default App;
+export default SidebarApp;

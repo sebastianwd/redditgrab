@@ -1,7 +1,7 @@
 import { MediaContentType } from "@/types";
-import { getVideoUrl } from "@/utils/dowload-utils";
 
 import { folderDestination as folderDestinationStorage } from "@/utils/storage";
+import { sendMessage } from "webext-bridge/content-script";
 
 const DownloadButton = ({
   mediaContainer,
@@ -38,21 +38,22 @@ const DownloadButton = ({
       );
 
       // Send message to background script to handle the download
-      const response = await browser.runtime.sendMessage({
-        type: "DOWNLOAD_REQUEST",
-        data: {
+      const downloadResponse = await sendMessage(
+        "DOWNLOAD_REQUEST",
+        {
           timestamp: Date.now(),
           mediaContentType,
           urls,
           folderDestination: finalFolderDestination,
           subredditName,
         },
-      });
+        "background"
+      );
 
-      if (response?.success) {
-        console.log("Download request sent successfully:", response);
-      } else if (response?.success === false) {
-        console.error("Download request failed:", response);
+      if (downloadResponse?.success) {
+        console.log("Download request sent successfully:", downloadResponse);
+      } else if (downloadResponse?.success === false) {
+        console.error("Download request failed:", downloadResponse);
       }
     } catch (error) {
       console.error("Failed to send download request:", error);

@@ -8,6 +8,15 @@ import { ScanPageMediaMessage } from "@/types/shim";
 import { processedPostIds } from "@/utils/storage";
 import { compact } from "es-toolkit";
 
+// Auto-scroll function to load more posts
+const scrollToLoadMore = () => {
+  window.scrollTo({
+    top: document.body.scrollHeight,
+    behavior: "smooth",
+  });
+  console.log("Scrolled to bottom to load more posts");
+};
+
 export default defineContentScript({
   matches: ["*://*.reddit.com/*"],
   cssInjectionMode: "ui",
@@ -214,6 +223,16 @@ export default defineContentScript({
           }
         }, 2000);
       }
+
+      return { success: true };
+    });
+
+    // Handle scroll to load more posts
+    onMessage("SCROLL_TO_LOAD_MORE", async () => {
+      scrollToLoadMore();
+
+      // Wait a bit for content to load
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       return { success: true };
     });

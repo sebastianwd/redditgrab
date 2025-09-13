@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reddit Media Downloader</title>
+
+    <!-- Configure sidepanel manifest options -->
+    <meta
+      name="manifest.default_icon"
+      content="{
+      '16': '/icon/16.png',
+      '32': '/icon/32.png',
+      '48': '/icon/48.png',
+      '96': '/icon/96.png',
+      '128': '/icon/128.png'
+    }"
+    />
+    <meta name="manifest.default_title" content="Reddit Media Downloader" />
+    <meta name="manifest.open_at_install" content="false" />
+    <meta name="manifest.browser_style" content="false" />
+    <link rel="stylesheet" href="~/assets/tailwind.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

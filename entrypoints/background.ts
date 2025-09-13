@@ -6,43 +6,58 @@ export default defineBackground(() => {
     console.log("Starting mass scraping:", message);
   });
 
-  console.log("Hello background!", { id: browser.runtime.id });
-
-  // Listen for messages from content scripts
-  browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log(
-      "Background script received message:",
-      message,
-      "from:",
-      sender
-    );
-
-    if (message.type === "DOWNLOAD_REQUEST") {
-      // Handle download request asynchronously
-      handleDownloadRequest(message.data)
-        .then(() => {
-          // Send success response back to content script
-          sendResponse({
-            success: true,
-            message: "Download request processed",
-          });
-        })
-        .catch((error) => {
-          console.error("Error handling download request:", error);
-          sendResponse({
-            success: false,
-            error: (error as Error).message,
-          });
-        });
-
-      // Return true to indicate we will send a response asynchronously
-      return true;
-    } else {
-      // Unknown message type - send immediate response
-      sendResponse({ success: false, error: "Unknown message type" });
-      return false; // No async response needed
+  onMessage("DOWNLOAD_REQUEST", async ({ data }) => {
+    try {
+      await handleDownloadRequest(data);
+      return { success: true };
+    } catch (error) {
+      console.error("Download request failed:", error);
+      return { success: false, message: (error as Error).message };
     }
   });
+
+  console.log("Hello background!", { id: browser.runtime.id });
+
+  // Handle extension icon click to toggle sidebar
+  const handleIconClick = async (tab: Browser.tabs.Tab) => {
+    try {
+      console.log(
+        "Extension icon clicked, browser.sidePanel:",
+        browser.sidePanel
+      );
+      // Chrome: Open side panel
+      if (browser.sidePanel && browser.sidePanel.open) {
+        await browser.sidePanel.open({
+          tabId: tab.id,
+          windowId: tab.windowId,
+        });
+        console.log("Opened Chrome side panel");
+      }
+      // Firefox: Toggle sidebar
+      else if (
+        (browser as any).sidebarAction &&
+        (browser as any).sidebarAction.toggle
+      ) {
+        await (browser as any).sidebarAction.toggle();
+        console.log("Toggled Firefox sidebar");
+      } else {
+        console.log("Sidebar API not available");
+      }
+    } catch (error) {
+      console.error("Failed to open/toggle sidebar:", error);
+    }
+  };
+
+  // Use browserAction for MV2, action for MV3
+  if (import.meta.env.MANIFEST_VERSION === 2) {
+    (browser as any).browserAction.onClicked.addListener(handleIconClick);
+    console.log("Registered MV2 browserAction.onClicked listener");
+  } else {
+    browser.action.onClicked.addListener(handleIconClick);
+    console.log("Registered MV3 action.onClicked listener");
+  }
+
+  console.log("Extension icon click opens sidepanel directly");
 });
 
 // Function to handle download requests
