@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   folderDestination as folderDestinationStorage,
   filenamePattern as filenamePatternStorage,
@@ -6,6 +6,7 @@ import {
 import { debounce } from "es-toolkit";
 import { sendMessage } from "webext-bridge/popup";
 import { useScrapingProgress } from "@/entrypoints/popup/use-scraping-progress";
+import { processedPostIds } from "@/utils/storage";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
   console.log("saving folder destination to", value);
@@ -50,6 +51,9 @@ function App() {
     setCurrentPostInfo,
   } = useScrapingProgress();
 
+  // Ref to control continuous processing loop
+  const shouldContinueProcessingRef = useRef(false);
+
   const handleFolderDestinationChange = (value: string) => {
     console.log("setting folder destination to", value);
     setFolderDestination(value);
@@ -73,121 +77,178 @@ function App() {
       }
 
       startScraping();
+      shouldContinueProcessingRef.current = true;
 
       console.log("Starting mass scraping");
 
-      // Ask content script to scan for media using webext-bridge
-      const response = await sendMessage(
-        "SCAN_PAGE_MEDIA",
-        undefined,
-        `content-script@${tab.id}`
-      );
+      const processPage = async () => {
+        // Ask content script to scan for media using webext-bridge
+        const response = await sendMessage(
+          "SCAN_PAGE_MEDIA",
+          undefined,
+          `content-script@${tab.id}`
+        );
 
-      console.log(
-        "Content script response:",
-        JSON.stringify(response, null, 2)
-      );
+        console.log(
+          "Content script response:",
+          JSON.stringify(response, null, 2)
+        );
 
-      if (!response.success || !response.data) {
-        throw new Error("Failed to get media from page");
-      }
+        if (!response.success || !response.data) {
+          throw new Error("Failed to get media from page");
+        }
 
-      const { mediaUrls } = response.data;
-      console.log(`Starting downloads for ${mediaUrls.length} media items`);
+        const { mediaUrls } = response.data;
+        console.log(`Starting downloads for ${mediaUrls.length} media items`);
 
-      // Update progress tracking
-      setCurrentBatchCount(mediaUrls.length);
+        // Update progress tracking
+        setCurrentBatchCount(mediaUrls.length);
 
-      // Process downloads similar to download-button.tsx
-      for (let i = 0; i < mediaUrls.length; i++) {
-        const mediaItem = mediaUrls[i];
-
-        try {
-          // Calculate folder destination with subreddit substitution
-          const finalFolderDestination = folderDestination?.includes(
-            "{subreddit}"
-          )
-            ? folderDestination.replace(/{subreddit}/g, mediaItem.subredditName)
-            : folderDestination || "Reddit Downloads";
-
-          console.log(
-            `Downloading ${i + 1}/${mediaUrls.length}: ${mediaItem.type} with ${
-              mediaItem.urls.length
-            } URLs`
-          );
-
-          // Update current post info and highlight
-          setCurrentPostInfo({
-            index: i + 1,
-            type: mediaItem.type,
-            subreddit: mediaItem.subredditName,
-          });
+        // Process downloads similar to download-button.tsx
+        for (let i = 0; i < mediaUrls.length; i++) {
+          const mediaItem = mediaUrls[i];
 
           try {
-            await sendMessage(
-              "HIGHLIGHT_CURRENT_POST",
-              {
-                postIndex: i,
-                subredditName: mediaItem.subredditName,
-                mediaType: mediaItem.type,
-              },
-              `content-script@${tab.id}`
+            // Calculate folder destination with subreddit substitution
+            const finalFolderDestination = folderDestination?.includes(
+              "{subreddit}"
+            )
+              ? folderDestination.replace(
+                  /{subreddit}/g,
+                  mediaItem.subredditName
+                )
+              : folderDestination || "Reddit Downloads";
+
+            console.log(
+              `Downloading ${i + 1}/${mediaUrls.length}: ${
+                mediaItem.type
+              } with ${mediaItem.urls.length} URLs`
             );
+
+            // Update current post info and highlight
+            setCurrentPostInfo({
+              index: i + 1,
+              type: mediaItem.type,
+              subreddit: mediaItem.subredditName,
+            });
+
+            try {
+              await sendMessage(
+                "HIGHLIGHT_CURRENT_POST",
+                {
+                  mediaPostId: mediaItem.mediaPostId,
+                  subredditName: mediaItem.subredditName,
+                  mediaType: mediaItem.type,
+                },
+                `content-script@${tab.id}`
+              );
+            } catch (error) {
+              console.warn("Failed to highlight post:", error);
+            }
+
+            // Send download request to background script
+            const downloadResponse = await browser.runtime.sendMessage({
+              type: "DOWNLOAD_REQUEST",
+              data: {
+                timestamp: Date.now(),
+                mediaContentType: mediaItem.type,
+                urls: mediaItem.urls,
+                folderDestination: finalFolderDestination,
+                subredditName: mediaItem.subredditName,
+              },
+            });
+
+            if (downloadResponse?.success) {
+              console.log(`Download ${i + 1} started successfully`);
+              incrementDownloadCount();
+
+              // Mark this post as processed in storage
+              const currentProcessedIds = await processedPostIds.getValue();
+              if (!currentProcessedIds.includes(mediaItem.mediaPostId)) {
+                await processedPostIds.setValue([
+                  ...currentProcessedIds,
+                  mediaItem.mediaPostId,
+                ]);
+              }
+            } else {
+              console.error(`Download ${i + 1} failed:`, downloadResponse);
+            }
+
+            // Small delay between downloads to avoid overwhelming the system
+            if (i < mediaUrls.length - 1) {
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
           } catch (error) {
-            console.warn("Failed to highlight post:", error);
+            console.error(`Failed to download item ${i + 1}:`, error);
           }
-
-          // Send download request to background script
-          const downloadResponse = await browser.runtime.sendMessage({
-            type: "DOWNLOAD_REQUEST",
-            data: {
-              timestamp: Date.now(),
-              mediaContentType: mediaItem.type,
-              urls: mediaItem.urls,
-              folderDestination: finalFolderDestination,
-              subredditName: mediaItem.subredditName,
-            },
-          });
-
-          if (downloadResponse?.success) {
-            console.log(`Download ${i + 1} started successfully`);
-            incrementDownloadCount();
-          } else {
-            console.error(`Download ${i + 1} failed:`, downloadResponse);
-          }
-
-          // Small delay between downloads to avoid overwhelming the system
-          if (i < mediaUrls.length - 1) {
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
-        } catch (error) {
-          console.error(`Failed to download item ${i + 1}:`, error);
         }
-      }
 
-      console.log("All downloads initiated!");
-      setCurrentPostInfo(null);
-      stopScraping();
+        const newPostsFound = mediaUrls.length > 0;
+        console.log(
+          `Batch complete! Downloaded ${mediaUrls.length} new posts.`
+        );
+        console.log(
+          "shouldContinueProcessingRef.current:",
+          shouldContinueProcessingRef.current
+        );
+        setCurrentPostInfo(null);
+
+        // Continue processing if scraping is still active
+        if (shouldContinueProcessingRef.current) {
+          if (newPostsFound) {
+            // Found new posts, check again soon for more
+            console.log(
+              "Found new posts, scheduling next check in 2 seconds..."
+            );
+            setTimeout(() => {
+              if (shouldContinueProcessingRef.current) {
+                console.log("Checking for more new posts...");
+                processPage();
+              }
+            }, 2000);
+          } else {
+            // No new posts found, wait longer before checking again
+            console.log(
+              "No new posts found, scheduling next check in 5 seconds..."
+            );
+            setTimeout(() => {
+              if (shouldContinueProcessingRef.current) {
+                console.log("No new posts found, checking again...");
+                processPage();
+              }
+            }, 5000);
+          }
+        } else {
+          console.log("Processing stopped by user");
+          stopScraping();
+        }
+      };
+
+      processPage();
     } catch (error) {
       console.error("Failed to start mass scraping:", error);
+      shouldContinueProcessingRef.current = false;
       stopScraping();
     }
   };
 
   const handleStopScraping = async () => {
     try {
-      const [tab] = await browser.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
-      if (tab?.id) {
-        await browser.tabs.sendMessage(tab.id, {
-          type: "STOP_MASS_SCRAPE",
-        });
-      }
+      shouldContinueProcessingRef.current = false;
+      setCurrentPostInfo(null);
       stopScraping();
+      console.log("Mass scraping stopped");
     } catch (error) {
       console.error("Failed to stop mass scraping:", error);
+    }
+  };
+
+  const handleClearProcessedPosts = async () => {
+    try {
+      await processedPostIds.setValue([]);
+      console.log("Cleared processed posts history");
+    } catch (error) {
+      console.error("Failed to clear processed posts:", error);
     }
   };
 
@@ -348,6 +409,16 @@ function App() {
             ? "Auto-scrolling and downloading media posts..."
             : "This will auto-scroll and download all media on the page"}
         </p>
+
+        {/* Clear Processed Posts Button */}
+        {!scrapingStatus.isScraping && (
+          <button
+            onClick={handleClearProcessedPosts}
+            className="mt-3 text-xs text-gray-400 hover:text-gray-600 underline transition-colors"
+          >
+            Clear processed posts history
+          </button>
+        )}
       </div>
     </div>
   );

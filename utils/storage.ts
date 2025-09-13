@@ -7,3 +7,7 @@ export const folderDestination = storage.defineItem("local:folderDestination", {
 export const filenamePattern = storage.defineItem("local:filenamePattern", {
   fallback: "{subreddit}_{timestamp}_{filename}",
 });
+
+export const processedPostIds = storage.defineItem("local:processedPostIds", {
+  fallback: [] as string[],
+});

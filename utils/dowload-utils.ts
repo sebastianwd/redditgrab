@@ -86,7 +86,6 @@ export async function downloadGalleryImages(
       // Trigger browser download with configured folder
       await browser.downloads.download({
         url: objectUrl,
-        conflictAction: "overwrite",
         filename: `${folderDestination}/${filename}`,
         saveAs: false,
       });
@@ -265,7 +264,7 @@ export async function getVideoUrl(mediaElement: Element) {
 
 export function getSubredditNameFromContainer(container: Element): string {
   try {
-    // Find the subreddit name anchor tag within the container
+    // First try to find the subreddit name anchor tag within the container
     const subredditAnchor = container.querySelector(
       'a[data-testid="subreddit-name"]'
     );
@@ -279,6 +278,17 @@ export function getSubredditNameFromContainer(container: Element): string {
       }
     }
 
+    // Fallback: extract subreddit from URL when we're on a subreddit page
+    const currentUrl = window.location.href;
+    const subredditMatch = currentUrl.match(/\/r\/([^\/]+)/);
+    if (subredditMatch) {
+      logger.log("Extracted subreddit from URL:", subredditMatch[1]);
+      return subredditMatch[1];
+    }
+
+    logger.warn(
+      "Could not determine subreddit name, falling back to 'unknown'"
+    );
     return "unknown";
   } catch (error) {
     console.error("Failed to get subreddit name from container:", error);

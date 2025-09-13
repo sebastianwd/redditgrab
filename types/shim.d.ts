@@ -8,14 +8,14 @@ export interface ScanPageMediaMessage {
     mediaUrls: {
       urls: string[];
       type: MediaContentType;
-      mediaContainer: Element;
       subredditName: string;
+      mediaPostId: string;
     }[];
   };
 }
 
 export interface HighlightPostMessage {
-  postIndex: number;
+  mediaPostId: string;
   subredditName: string;
   mediaType: string;
 }

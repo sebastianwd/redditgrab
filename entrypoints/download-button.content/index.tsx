@@ -5,6 +5,8 @@ import DownloadButton from "@/components/download-button";
 import { onMessage } from "webext-bridge/content-script";
 import { Selectors } from "@/utils/constants";
 import { ScanPageMediaMessage } from "@/types/shim";
+import { processedPostIds } from "@/utils/storage";
+import { compact } from "es-toolkit";
 
 export default defineContentScript({
   matches: ["*://*.reddit.com/*"],
@@ -109,29 +111,45 @@ export default defineContentScript({
     onMessage("SCAN_PAGE_MEDIA", async () => {
       const posts = document.querySelectorAll("shreddit-post");
       let mediaCount = 0;
-      const mediaUrls = [] as ScanPageMediaMessage["data"]["mediaUrls"];
-      await Promise.all(
-        Array.from(posts).map(async (post) => {
-          const mediaContainer = getMediaContainer(post);
 
-          if (mediaContainer) {
-            const subredditName = getSubredditNameFromContainer(
-              mediaContainer.element.closest("shreddit-post") ||
-                mediaContainer.element
-            );
+      // Get already processed post IDs from storage
+      const processedIds = await processedPostIds.getValue();
+      const processedSet = new Set(processedIds);
 
-            mediaCount++;
-            mediaUrls.push({
-              urls: await getDownloadUrlsFromContainer(
-                mediaContainer.element,
-                mediaContainer.type
-              ),
-              mediaContainer: mediaContainer.element,
-              type: mediaContainer.type,
-              subredditName,
-            });
-          }
-        })
+      const mediaUrls = compact(
+        await Promise.all(
+          Array.from(posts).map(async (post, index) => {
+            const mediaContainer = getMediaContainer(post);
+
+            if (mediaContainer) {
+              const uniqueId = setPostIdentifier(post);
+
+              // Skip if we've already processed this post
+              if (processedSet.has(uniqueId)) {
+                console.log(`Skipping already processed post: ${uniqueId}`);
+                return null;
+              }
+
+              const subredditName = getSubredditNameFromContainer(
+                mediaContainer.element.closest("shreddit-post") ||
+                  mediaContainer.element
+              );
+
+              mediaCount++;
+              return {
+                urls: await getDownloadUrlsFromContainer(
+                  mediaContainer.element,
+                  mediaContainer.type
+                ),
+                type: mediaContainer.type,
+                subredditName,
+                mediaPostId: uniqueId,
+              };
+            }
+
+            return null;
+          })
+        )
       );
 
       return {
@@ -145,18 +163,14 @@ export default defineContentScript({
 
     // Handle post highlighting during download process
     onMessage("HIGHLIGHT_CURRENT_POST", async ({ data }) => {
-      const { postIndex, subredditName, mediaType } = data;
+      const { mediaPostId, subredditName, mediaType } = data;
 
-      // Find all posts with media
-      const posts = document.querySelectorAll("shreddit-post");
-      const postsWithMedia = Array.from(posts).filter((post) => {
-        const mediaContainer = getMediaContainer(post);
-        return mediaContainer !== null;
-      });
+      // Find the specific post using the unique ID (much more efficient!)
+      const currentPost = document.querySelector(
+        `[data-wxt-media-id="${mediaPostId}"]`
+      ) as HTMLElement;
 
-      if (postIndex < postsWithMedia.length) {
-        const currentPost = postsWithMedia[postIndex] as HTMLElement;
-
+      if (currentPost) {
         // Scroll to the post
         currentPost.scrollIntoView({
           behavior: "smooth",
@@ -199,12 +213,6 @@ export default defineContentScript({
             indicator.parentNode.removeChild(indicator);
           }
         }, 2000);
-
-        console.log(
-          `Highlighted post ${
-            postIndex + 1
-          } (${mediaType}) from ${subredditName}`
-        );
       }
 
       return { success: true };
