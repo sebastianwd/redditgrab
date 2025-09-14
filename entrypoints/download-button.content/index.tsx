@@ -159,6 +159,7 @@ export default defineContentScript({
                 type: mediaContainer.type,
                 subredditName,
                 mediaPostId: uniqueId,
+                postTitle: getPostTitle(post),
               };
             }
 

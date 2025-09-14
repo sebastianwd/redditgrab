@@ -7,8 +7,8 @@ import topLevelAwait from "vite-plugin-top-level-await";
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: ({ browser }) => ({
-    name: "Reddit Media Downloader",
-    description: "Download media posts from Reddit subreddit feeds",
+    name: "RedditGrab",
+    description: "Grab images and videos from Reddit posts",
     version: "1.0.0",
     permissions: [
       "webRequest",
@@ -16,7 +16,7 @@ export default defineConfig({
       "activeTab",
       "storage",
       "scripting",
-      "tabs", // Needed for querying active tab
+      "tabs",
     ],
     host_permissions: [
       "*://*.reddit.com/*",
@@ -40,8 +40,6 @@ export default defineConfig({
     action: {},
     // Enable extension icon click for MV2
     browser_action: {},
-    // WXT automatically handles sidepanel configuration from HTML meta tags
-    // Extension icon click opens sidebar directly via background script
   }),
   vite: () =>
     ({

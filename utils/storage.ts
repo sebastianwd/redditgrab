@@ -11,3 +11,15 @@ export const filenamePattern = storage.defineItem("local:filenamePattern", {
 export const processedPostIds = storage.defineItem("local:processedPostIds", {
   fallback: [] as string[],
 });
+
+export const useGalleryFolders = storage.defineItem("local:useGalleryFolders", {
+  fallback: false,
+});
+
+export const addTitleToImages = storage.defineItem("local:addTitleToImages", {
+  fallback: false,
+});
+
+export const addTitleToVideos = storage.defineItem("local:addTitleToVideos", {
+  fallback: false,
+});

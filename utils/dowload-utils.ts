@@ -1,3 +1,5 @@
+import { addTextToImage, addTextToVideo } from "./image-utils";
+
 // Function to extract RedGIFs m3u8 URL from iframe
 export const getRedGifsUrl = (mediaElement: Element): string | null => {
   // Check if the element itself is a shreddit-embed
@@ -97,7 +99,10 @@ async function getRemoteFile(url: string) {
 export async function downloadGalleryImages(
   urls: string[],
   folderDestination: string = "Reddit Downloads",
-  subredditName: string = "unknown"
+  subredditName: string = "unknown",
+  useGalleryFolders: boolean = false,
+  addTitleToImages: boolean = false,
+  postTitle?: string
 ) {
   logger.log("Downloading gallery images:", urls);
 
@@ -105,9 +110,33 @@ export async function downloadGalleryImages(
   const pattern =
     (await filenamePattern.getValue()) || "{subreddit}_{timestamp}_{filename}";
 
+  // Create gallery folder name if using gallery folders
+  const galleryFolderSuffix =
+    useGalleryFolders && urls.length > 1
+      ? `_gallery_${getCurrentTimestamp()}`
+      : "";
+
+  const finalFolderDestination =
+    useGalleryFolders && urls.length > 1
+      ? `${folderDestination}/${subredditName}${galleryFolderSuffix}`
+      : folderDestination;
+
   await Promise.all(
-    urls.map(async (url) => {
-      const { extension, blob } = await getRemoteFile(url);
+    urls.map(async (url, index) => {
+      let { extension, blob } = await getRemoteFile(url);
+
+      // Apply text overlay if enabled and we have a title
+      if (addTitleToImages && postTitle && extension !== "gif") {
+        try {
+          blob = await addTextToImage(blob, postTitle);
+          // Change extension to PNG since we're converting the image
+          extension = "png";
+        } catch (error) {
+          logger.error("Failed to add text to image:", error);
+          // Continue with original image if overlay fails
+        }
+      }
+
       const objectUrl = URL.createObjectURL(blob);
 
       // Generate filename using pattern
@@ -118,10 +147,16 @@ export async function downloadGalleryImages(
         extension,
       });
 
+      // For galleries with folders, add index to filename to avoid conflicts
+      const finalFilename =
+        useGalleryFolders && urls.length > 1
+          ? `${index + 1}_${filename}`
+          : filename;
+
       // Trigger browser download with configured folder
       await browser.downloads.download({
         url: objectUrl,
-        filename: `${folderDestination}/${filename}`,
+        filename: `${finalFolderDestination}/${finalFilename}`,
         saveAs: false,
       });
     })
@@ -131,7 +166,9 @@ export async function downloadGalleryImages(
 export async function downloadVideo(
   url: string,
   folderDestination: string = "Reddit Downloads",
-  subredditName: string = "unknown"
+  subredditName: string = "unknown",
+  addTitleToVideo: boolean = false,
+  postTitle?: string
 ) {
   try {
     logger.log("Downloading video:", url);
@@ -163,11 +200,49 @@ export async function downloadVideo(
       extension: "mp4",
     });
 
-    browser.downloads.download({
-      url,
-      filename: `${folderDestination}/${filename}`,
-      saveAs: false,
-    });
+    // If text overlay is enabled and we have a title, process the video
+    if (addTitleToVideo && postTitle) {
+      try {
+        logger.log("Adding text overlay to video:", postTitle);
+
+        // Fetch the video
+        const response = await fetch(url);
+        const videoBlob = await response.blob();
+
+        // Add text overlay
+        const processedVideoBlob = await addTextToVideo(videoBlob, postTitle);
+
+        // Create object URL for the processed video
+        const objectUrl = URL.createObjectURL(processedVideoBlob);
+
+        // Download the processed video
+        await browser.downloads.download({
+          url: objectUrl,
+          filename: `${folderDestination}/${filename}`,
+          saveAs: false,
+        });
+
+        logger.log("Video with text overlay downloaded successfully");
+      } catch (error) {
+        logger.error(
+          "Failed to add text to video, downloading original:",
+          error
+        );
+        // Fallback to original video if processing fails
+        await browser.downloads.download({
+          url,
+          filename: `${folderDestination}/${filename}`,
+          saveAs: false,
+        });
+      }
+    } else {
+      // Download original video without processing
+      await browser.downloads.download({
+        url,
+        filename: `${folderDestination}/${filename}`,
+        saveAs: false,
+      });
+    }
   } catch (err) {
     logger.error("Failed to parse packaged-media-json:", err);
   }
@@ -336,25 +411,31 @@ export async function getHLSVideoUrl(m3u8Url: string) {
 
   const videoResponse = await fetch(videoUrl.replace(".m3u8", ".ts"));
   const tsFile = new Uint8Array(await videoResponse.arrayBuffer());
-  ffmpeg.writeFile("video.ts", tsFile);
+  await ffmpeg.writeFile("video.ts", tsFile);
 
-  // change m3u8Url to .ts url
-  // const tsUrl = m3u8Url.replace(".m3u8", ".ts");
-  const audioResponse = await fetch(audioUrl.replace(".m3u8", ".aac"));
-  const tsFile2 = new Uint8Array(await audioResponse.arrayBuffer());
-  ffmpeg.writeFile("audio.ts", tsFile2);
+  // Check if audioUrl is empty or null
+  const hasAudio = audioUrl && audioUrl.trim() !== "";
 
-  console.log("files", await ffmpeg.listDir("."));
+  if (hasAudio) {
+    // Process video with audio
+    const audioResponse = await fetch(audioUrl.replace(".m3u8", ".aac"));
+    const audioFile = new Uint8Array(await audioResponse.arrayBuffer());
+    await ffmpeg.writeFile("audio.ts", audioFile);
 
-  await ffmpeg.exec([
-    "-i",
-    "video.ts",
-    "-i",
-    "audio.ts",
-    "-c",
-    "copy",
-    "output.mp4",
-  ]);
+    await ffmpeg.exec([
+      "-i",
+      "video.ts",
+      "-i",
+      "audio.ts",
+      "-c",
+      "copy",
+      "output.mp4",
+    ]);
+  } else {
+    // Process video only (no audio)
+    logger.log("No audio URL provided, processing video only");
+    await ffmpeg.exec(["-i", "video.ts", "-c", "copy", "output.mp4"]);
+  }
 
   const videoData = await ffmpeg.readFile("output.mp4");
   const buffer = new Uint8Array(videoData as unknown as ArrayBuffer);

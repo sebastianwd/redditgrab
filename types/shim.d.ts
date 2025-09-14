@@ -10,6 +10,7 @@ export interface ScanPageMediaMessage {
       type: MediaContentType;
       subredditName: string;
       mediaPostId: string;
+      postTitle?: string;
     }[];
   };
 }
@@ -34,6 +35,10 @@ export interface DownloadRequestMessage {
   urls: string[];
   folderDestination: string;
   subredditName: string;
+  useGalleryFolders: boolean;
+  addTitleToImages: boolean;
+  addTitleToVideos: boolean;
+  postTitle?: string;
 }
 
 export interface DownloadRequestResponse {

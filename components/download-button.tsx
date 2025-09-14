@@ -1,6 +1,14 @@
+import { useState } from "react";
 import { MediaContentType } from "@/types";
-import { folderDestination as folderDestinationStorage } from "@/utils/storage";
+import {
+  folderDestination as folderDestinationStorage,
+  useGalleryFolders as useGalleryFoldersStorage,
+  addTitleToImages as addTitleToImagesStorage,
+  addTitleToVideos as addTitleToVideosStorage,
+} from "@/utils/storage";
 import { sendMessage } from "webext-bridge/content-script";
+import { Button } from "@/components/ui/button";
+import { Icon } from "@iconify/react";
 
 const DownloadButton = ({
   mediaContainer,
@@ -9,19 +17,27 @@ const DownloadButton = ({
   mediaContainer: Element;
   mediaContentType: MediaContentType;
 }) => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    const urls = await getDownloadUrlsFromContainer(
-      mediaContainer,
-      mediaContentType
-    );
+    if (isDownloading) return; // Prevent multiple clicks
 
-    console.log("urls", urls);
+    setIsDownloading(true);
 
     try {
-      // Get the latest folder configuration from storage
+      const urls = await getDownloadUrlsFromContainer(
+        mediaContainer,
+        mediaContentType
+      );
+
+      console.log("urls", urls);
+      // Get the latest settings from storage
       const latestFolderConfig = await folderDestinationStorage.getValue();
+      const useGalleryFolders = await useGalleryFoldersStorage.getValue();
+      const addTitleToImages = await addTitleToImagesStorage.getValue();
+      const addTitleToVideos = await addTitleToVideosStorage.getValue();
 
       // Only include subreddit if the variable is present
       const finalFolderDestination = latestFolderConfig?.includes("{subreddit}")
@@ -38,6 +54,10 @@ const DownloadButton = ({
         mediaContainer.closest("shreddit-post") || mediaContainer
       );
 
+      // Get post title if needed
+      const postElement = mediaContainer.closest("shreddit-post");
+      const postTitle = postElement ? getPostTitle(postElement) : undefined;
+
       // Send message to background script to handle the download
       const downloadResponse = await sendMessage(
         "DOWNLOAD_REQUEST",
@@ -47,6 +67,10 @@ const DownloadButton = ({
           urls,
           folderDestination: finalFolderDestination,
           subredditName,
+          useGalleryFolders,
+          addTitleToImages,
+          addTitleToVideos,
+          postTitle,
         },
         "background"
       );
@@ -58,18 +82,29 @@ const DownloadButton = ({
       }
     } catch (error) {
       console.error("Failed to send download request:", error);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
   return (
-    <button
-      type="button"
+    <Button
       onClick={handleDownload}
       data-media-content-type={mediaContentType}
-      className="bg-blue-600 text-white h-6 rounded-full text-xs px-4 hover:bg-blue-400 cursor-pointer float-right mt-1 relative"
+      size="sm"
+      variant="secondary"
+      disabled={isDownloading}
+      className="float-right mt-1 rounded-4xl relative cursor-pointer"
     >
-      Download
-    </button>
+      {isDownloading ? (
+        <>
+          <Icon icon="lucide:loader-2" className="animate-spin mr-1 size-3" />
+          Downloading...
+        </>
+      ) : (
+        "Download"
+      )}
+    </Button>
   );
 };
 

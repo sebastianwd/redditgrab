@@ -1,5 +1,6 @@
 import type { MediaContentType } from "~/types";
 import { onMessage, sendMessage } from "webext-bridge/background";
+import { DownloadRequestMessage } from "@/types/shim";
 
 export default defineBackground(() => {
   onMessage("DOWNLOAD_REQUEST", async ({ data }) => {
@@ -55,13 +56,7 @@ export default defineBackground(() => {
 });
 
 // Function to handle download requests
-async function handleDownloadRequest(data: {
-  timestamp: number;
-  mediaContentType: MediaContentType;
-  urls: string[];
-  folderDestination?: string;
-  subredditName?: string;
-}) {
+async function handleDownloadRequest(data: DownloadRequestMessage) {
   console.log("Processing download request22:", data);
 
   // Get the current active tab to access the page content
@@ -84,12 +79,25 @@ async function handleDownloadRequest(data: {
     data.mediaContentType === "multiple-images" ||
     data.mediaContentType === "single-image"
   ) {
-    await downloadGalleryImages(data.urls, folderDestination, subredditName);
+    await downloadGalleryImages(
+      data.urls,
+      folderDestination,
+      subredditName,
+      data.useGalleryFolders,
+      data.addTitleToImages,
+      data.postTitle
+    );
   }
 
   if (data.mediaContentType === "video") {
     console.log("downloading video", data.urls[0]);
-    await downloadVideo(data.urls[0], folderDestination, subredditName);
+    await downloadVideo(
+      data.urls[0],
+      folderDestination,
+      subredditName,
+      data.addTitleToVideos,
+      data.postTitle
+    );
   }
 
   console.log("Download request processed for tab:", tab.id);
