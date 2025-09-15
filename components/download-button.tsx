@@ -32,7 +32,6 @@ const DownloadButton = ({
         mediaContentType
       );
 
-      console.log("urls", urls);
       // Get the latest settings from storage
       const latestFolderConfig = await folderDestinationStorage.getValue();
       const useGalleryFolders = await useGalleryFoldersStorage.getValue();
@@ -76,7 +75,6 @@ const DownloadButton = ({
       );
 
       if (downloadResponse?.success) {
-        console.log("Download request sent successfully:", downloadResponse);
       } else if (downloadResponse?.success === false) {
         console.error("Download request failed:", downloadResponse);
       }

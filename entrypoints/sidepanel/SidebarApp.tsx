@@ -19,34 +19,30 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Icon } from "@iconify/react";
+import { logger } from "@/utils/logger";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
-  console.log("saving folder destination to", value);
   await folderDestinationStorage.setValue(value);
 }, 500);
 
 const debouncedSaveFilename = debounce(async (value: string) => {
-  console.log("saving filename pattern to", value);
   await filenamePatternStorage.setValue(value);
 }, 500);
 
 const debouncedSaveGalleryFolders = debounce(async (value: boolean) => {
-  console.log("saving gallery folders setting to", value);
   await useGalleryFoldersStorage.setValue(value);
 }, 500);
 
 const debouncedSaveTitleToImages = debounce(async (value: boolean) => {
-  console.log("saving title to images setting to", value);
   await addTitleToImagesStorage.setValue(value);
 }, 500);
 
 const debouncedSaveTitleToVideos = debounce(async (value: boolean) => {
-  console.log("saving title to videos setting to", value);
   await addTitleToVideosStorage.setValue(value);
 }, 500);
 
 function SidebarApp() {
-  console.log("SidebarApp component rendering...");
+  logger.log("SidebarApp component rendering...");
 
   const [folderDestination, setFolderDestination] = useState(
     "Reddit Downloads/{subreddit}"
@@ -169,31 +165,31 @@ function SidebarApp() {
   const shouldContinueProcessingRef = useRef(false);
 
   const handleFolderDestinationChange = (value: string) => {
-    console.log("setting folder destination to", value);
+    logger.log("setting folder destination to", value);
     setFolderDestination(value);
     debouncedSaveFolder(value);
   };
 
   const handleFilenamePatternChange = (value: string) => {
-    console.log("setting filename pattern to", value);
+    logger.log("setting filename pattern to", value);
     setFilenamePattern(value);
     debouncedSaveFilename(value);
   };
 
   const handleGalleryFoldersChange = (checked: boolean) => {
-    console.log("setting gallery folders to", checked);
+    logger.log("setting gallery folders to", checked);
     setUseGalleryFolders(checked);
     debouncedSaveGalleryFolders(checked);
   };
 
   const handleTitleToImagesChange = (checked: boolean) => {
-    console.log("setting title to images to", checked);
+    logger.log("setting title to images to", checked);
     setAddTitleToImages(checked);
     debouncedSaveTitleToImages(checked);
   };
 
   const handleTitleToVideosChange = (checked: boolean) => {
-    console.log("setting title to videos to", checked);
+    logger.log("setting title to videos to", checked);
     setAddTitleToVideos(checked);
     debouncedSaveTitleToVideos(checked);
   };
@@ -211,7 +207,7 @@ function SidebarApp() {
       startScraping();
       shouldContinueProcessingRef.current = true;
 
-      console.log("Starting mass scraping from sidebar");
+      logger.log("Starting mass scraping from sidebar");
 
       const processPage = async () => {
         // Ask content script to scan for media using webext-bridge
@@ -221,7 +217,7 @@ function SidebarApp() {
           `content-script@${tab.id}`
         );
 
-        console.log(
+        logger.log(
           "Content script response:",
           JSON.stringify(response, null, 2)
         );
@@ -231,7 +227,7 @@ function SidebarApp() {
         }
 
         const { mediaUrls } = response.data;
-        console.log(`Starting downloads for ${mediaUrls.length} media items`);
+        logger.log(`Starting downloads for ${mediaUrls.length} media items`);
 
         // Update progress tracking
         setCurrentBatchCount(mediaUrls.length);
@@ -242,7 +238,7 @@ function SidebarApp() {
           const mediaItem = mediaUrls[i];
 
           if (!shouldContinueProcessingRef.current) {
-            console.log("Processing stopped by user");
+            logger.log("Processing stopped by user");
             break;
           }
 
@@ -257,7 +253,7 @@ function SidebarApp() {
                 )
               : folderDestination || "Reddit Downloads";
 
-            console.log(
+            logger.log(
               `Downloading ${i + 1}/${mediaUrls.length}: ${
                 mediaItem.type
               } with ${mediaItem.urls.length} URLs`
@@ -302,7 +298,7 @@ function SidebarApp() {
             );
 
             if (downloadResponse?.success) {
-              console.log(`Download ${i + 1} started successfully`);
+              logger.log(`Download ${i + 1} started successfully`);
               incrementDownloadCount();
 
               // Mark this post as processed in storage
@@ -327,10 +323,8 @@ function SidebarApp() {
         }
 
         const newPostsFound = mediaUrls.length > 0;
-        console.log(
-          `Batch complete! Downloaded ${mediaUrls.length} new posts.`
-        );
-        console.log(
+        logger.log(`Batch complete! Downloaded ${mediaUrls.length} new posts.`);
+        logger.log(
           "shouldContinueProcessingRef.current:",
           shouldContinueProcessingRef.current
         );
@@ -340,23 +334,23 @@ function SidebarApp() {
         if (shouldContinueProcessingRef.current) {
           if (newPostsFound) {
             // Found new posts, check again soon for more
-            console.log(
+            logger.log(
               "Found new posts, scheduling next check in 2 seconds..."
             );
             setTimeout(() => {
               if (shouldContinueProcessingRef.current) {
-                console.log("Checking for more new posts...");
+                logger.log("Checking for more new posts...");
                 processPage();
               }
             }, 2000);
           } else {
-            console.log("No new posts found, scrolling to load more...");
+            logger.log("No new posts found, scrolling to load more...");
             await sendMessage(
               "SCROLL_TO_LOAD_MORE",
               undefined,
               `content-script@${tab.id}`
             );
-            console.log(
+            logger.log(
               "Scrolled to load more posts, checking again in 3 seconds..."
             );
             setTimeout(() => {
@@ -366,7 +360,7 @@ function SidebarApp() {
             }, 3000);
           }
         } else {
-          console.log("Processing stopped by user");
+          logger.log("Processing stopped by user");
           stopScraping();
         }
       };
@@ -384,7 +378,7 @@ function SidebarApp() {
       shouldContinueProcessingRef.current = false;
       setCurrentPostInfo(null);
       stopScraping();
-      console.log("Mass scraping stopped");
+      logger.log("Mass scraping stopped");
     } catch (error) {
       console.error("Failed to stop mass scraping:", error);
     }
@@ -394,7 +388,7 @@ function SidebarApp() {
     try {
       setIsClearingHistory(true);
       await processedPostIds.setValue([]);
-      console.log("Cleared processed posts history");
+      logger.log("Cleared processed posts history");
       // Small delay to show the loading state
       await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
@@ -482,7 +476,6 @@ function SidebarApp() {
       className="w-full h-full min-h-screen p-4 bg-gradient-to-br from-gray-50 to-white"
       style={{ minWidth: "300px" }}
     >
-      {/* Header */}
       <div className="text-center mb-6">
         <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-2">
           <Icon icon="lucide:download" className="text-white w-5 h-5" />
@@ -493,9 +486,7 @@ function SidebarApp() {
         </p>
       </div>
 
-      {/* Settings Section */}
       <div className="space-y-4 mb-6">
-        {/* Folder Destination */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Download Folder
@@ -512,7 +503,6 @@ function SidebarApp() {
           </p>
         </div>
 
-        {/* Filename Pattern */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Filename Pattern
@@ -529,7 +519,6 @@ function SidebarApp() {
           </p>
         </div>
 
-        {/* Gallery Folders */}
         <div className="flex items-center space-x-3">
           <Checkbox
             id="gallery-folders"
@@ -546,7 +535,6 @@ function SidebarApp() {
           </div>
         </div>
 
-        {/* Add Title to Images */}
         <div className="flex items-center space-x-3">
           <Checkbox
             id="title-to-images"
@@ -563,7 +551,6 @@ function SidebarApp() {
           </div>
         </div>
 
-        {/* Add Title to Videos */}
         <div className="flex items-center space-x-3">
           <Checkbox
             id="title-to-videos"
@@ -581,7 +568,6 @@ function SidebarApp() {
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="space-y-3">
         {!scrapingStatus.isScraping ? (
           <Button onClick={handleMassScrape} className="w-full">
@@ -657,7 +643,6 @@ function SidebarApp() {
             : "This will scroll and download all media on the page"}
         </p>
 
-        {/* Clear Processed Posts Button */}
         {!scrapingStatus.isScraping && (
           <Button
             onClick={handleClearProcessedPosts}

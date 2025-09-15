@@ -6,14 +6,14 @@ import { onMessage } from "webext-bridge/content-script";
 import { Selectors } from "@/utils/constants";
 import { processedPostIds } from "@/utils/storage";
 import { compact } from "es-toolkit";
+import { logger } from "@/utils/logger";
 
-// Auto-scroll function to load more posts
 const scrollToLoadMore = () => {
   window.scrollTo({
     top: document.body.scrollHeight,
     behavior: "smooth",
   });
-  console.log("Scrolled to bottom to load more posts");
+  logger.log("Scrolled to bottom to load more posts");
 };
 
 export default defineContentScript({
@@ -61,13 +61,11 @@ export default defineContentScript({
       return null;
     };
 
-    // Function to attach buttons to elements
     const attachButtons = async () => {
       const elements = document.querySelectorAll("shreddit-post");
 
       await Promise.all(
         Array.from(elements).map(async (element) => {
-          // Skip if already mounted
           if (mountedUIs.has(element)) return;
 
           const mediaContainer = getMediaContainer(element);
@@ -80,12 +78,8 @@ export default defineContentScript({
             anchor: element,
             append: "last",
             onMount: (container) => {
-              // Container is a body, and React warns when creating a root on the body, so create a wrapper div
-
               const app = document.createElement("div");
               container.append(app);
-
-              // Create a root on the UI container and render a component
               const root = ReactDOM.createRoot(app);
               root.render(
                 <DownloadButton
@@ -96,12 +90,10 @@ export default defineContentScript({
               return root;
             },
             onRemove: (root) => {
-              // Unmount the root when the UI is removed
               root?.unmount();
             },
           });
 
-          // Mount the UI and track it
           ui.mount();
           mountedUIs.add(element);
         })
@@ -116,7 +108,7 @@ export default defineContentScript({
     const handleScroll = () => {
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(async () => {
-        console.log("Scroll detected, reattaching buttons...");
+        logger.log("Scroll detected, reattaching buttons...");
         await attachButtons();
       }, 150);
     };
@@ -141,7 +133,7 @@ export default defineContentScript({
 
               // Skip if we've already processed this post
               if (processedSet.has(uniqueId)) {
-                console.log(`Skipping already processed post: ${uniqueId}`);
+                logger.log(`Skipping already processed post: ${uniqueId}`);
                 return null;
               }
 
@@ -177,17 +169,14 @@ export default defineContentScript({
       };
     });
 
-    // Handle post highlighting during download process
     onMessage("HIGHLIGHT_CURRENT_POST", async ({ data }) => {
       const { mediaPostId, subredditName, mediaType } = data;
 
-      // Find the specific post using the unique ID (much more efficient!)
       const currentPost = document.querySelector(
         `[data-wxt-media-id="${mediaPostId}"]`
       ) as HTMLElement;
 
       if (currentPost) {
-        // Scroll to the post
         currentPost.scrollIntoView({
           behavior: "smooth",
           block: "center",

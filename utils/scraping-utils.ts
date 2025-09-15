@@ -6,7 +6,6 @@ export const getDownloadUrlsFromContainer = async (
 ) => {
   let urls: string[] = [];
 
-  // Check for RedGIFs first
   const redGifsUrl = getRedGifsUrl(mediaContainer);
   if (redGifsUrl) {
     urls = [redGifsUrl];
@@ -36,7 +35,6 @@ export const getDownloadUrlsFromContainer = async (
 
 export function getSubredditNameFromContainer(container: Element): string {
   try {
-    // First try to find the subreddit name anchor tag within the container
     const subredditAnchor = container.querySelector(
       'a[data-testid="subreddit-name"]'
     );
@@ -50,7 +48,6 @@ export function getSubredditNameFromContainer(container: Element): string {
       }
     }
 
-    // Fallback: extract subreddit from URL when we're on a subreddit page
     const currentUrl = window.location.href;
     const subredditMatch = currentUrl.match(/\/r\/([^\/]+)/);
     if (subredditMatch) {

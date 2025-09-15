@@ -4,8 +4,6 @@
 
 import { fetchFile } from "@ffmpeg/util";
 
-// Cache the font data to avoid re-fetching it every time
-
 /**
  * Add text overlay to an image
  * @param imageBlob - The original image blob
@@ -175,11 +173,6 @@ export async function addTextToVideo(
       return lines;
     };
 
-    // Helper function to escape text for FFmpeg
-    const escapeTextForFFmpeg = (text: string): string => {
-      return text.replace(/"/g, '\\"'); // Escape double quotes for use in double-quoted strings
-    };
-
     // Calculate dimensions and wrap text
     const textLength = text.length;
     const { boxHeight, fontSize, maxCharsPerLine } =
@@ -193,7 +186,6 @@ export async function addTextToVideo(
           (boxHeight / textLines.length) *
           Math.max(index, textLines.length === 1 ? 0.4 : 0.2);
 
-        console.log("startY", boxHeight, startY);
         return `drawtext=textfile=${`temp${index}.txt`}:fontcolor=black:fontsize=${fontSize}:x=(w-text_w)/2:y=${startY}:fontfile=OpenSans-Bold.ttf`;
       })
     );

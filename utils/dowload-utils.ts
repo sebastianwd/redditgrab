@@ -1,28 +1,23 @@
 import { addTextToImage, addTextToVideo } from "./image-utils";
+import { logger } from "./logger";
 
-// Function to extract RedGIFs m3u8 URL from iframe
 export const getRedGifsUrl = (mediaElement: Element): string | null => {
-  // Check if the element itself is a shreddit-embed
   let embed: Element | null = null;
 
   if (mediaElement.tagName.toLowerCase() === "shreddit-embed") {
     embed = mediaElement;
   } else {
-    // Look for shreddit-embed within the element
     embed = mediaElement.querySelector("shreddit-embed");
   }
 
   if (!embed) return null;
 
-  // Check if it's a RedGIFs embed
   const providerName = embed.getAttribute("providername");
   if (providerName !== "RedGIFs") return null;
 
-  // Extract the HTML content and parse the iframe src
   const htmlContent = embed.getAttribute("html");
   if (!htmlContent) return null;
 
-  // Parse the iframe src from the HTML content
   const iframeMatch = htmlContent.match(
     /src="([^"]*redgifs\.com\/ifr\/([^"?]+))/
   );
@@ -248,7 +243,6 @@ export async function downloadVideo(
   }
 }
 
-// RedGIFs HLS downloader - manually download segments for FFmpeg.wasm
 export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
   try {
     logger.log("Processing RedGIFs HLS with manual segment download:", m3u8Url);
@@ -315,7 +309,6 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     // Read the final video file
     const finalVideo = await ffmpeg.readFile("live.mp4");
 
-    // Clean up all files
     const filesToClean = [
       ...segmentFiles,
       "concatenated.m4s",
@@ -325,12 +318,9 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     for (const file of filesToClean) {
       try {
         await ffmpeg.deleteFile(file);
-      } catch (e) {
-        // Ignore deletion errors
-      }
+      } catch (e) {}
     }
 
-    // Create blob URL for download
     const blob = new Blob([finalVideo], { type: "video/mp4" });
     const blobUrl = URL.createObjectURL(blob);
 
@@ -508,27 +498,22 @@ const getHighestQualityHLS = async (m3u8Url: string) => {
 };
 
 export async function getVideoUrl(mediaElement: Element) {
-  console.log("getting video url for", mediaElement);
+  logger.log("getting video url for", mediaElement);
 
-  // Check for RedGIFs first
   const redGifsUrl = getRedGifsUrl(mediaElement);
   if (redGifsUrl) {
-    console.log("found redgifs url", redGifsUrl);
     return redGifsUrl;
   }
 
   // First check if there's a direct m3u8 URL (HLS stream)
   const sourceUrl = mediaElement.getAttribute("src");
   if (sourceUrl && sourceUrl.includes(".m3u8")) {
-    // Check if it's RedGIFs HLS
     if (sourceUrl.includes("api.redgifs.com")) {
       const url = await getRedGifsHLSVideoUrl(sourceUrl);
-      console.log("found redgifs complete m3u8 url", url);
       return url;
     } else {
       // Reddit HLS
       const url = await getHighestQualityHLS(sourceUrl);
-      console.log("found reddit m3u8 url", url);
       return url;
     }
   }
