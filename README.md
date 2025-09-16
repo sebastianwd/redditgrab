@@ -2,6 +2,8 @@
 
 Browser extension for downloading images and videos from Reddit posts. Supports individual downloads and mass downloading with auto-scrolling.
 
+https://github.com/user-attachments/assets/35a07fed-9448-4369-b3c5-638a47ac93fa
+
 ## Features
 
 - Individual post downloads via injected buttons
@@ -71,6 +73,7 @@ Built with [WXT](https://wxt.dev/) and React.
 entrypoints/
 ├── background.ts          # Background script
 ├── download-button.content/ # Content script
+├── offscreen/             # Offscreen document (Chrome only)
 └── sidepanel/             # Sidebar UI
 components/                # React components
 utils/                     # Utilities
@@ -85,6 +88,7 @@ public/                    # Static assets
 - `storage` - Save settings
 - `scripting` - Inject buttons
 - `tabs` - Query active tab
+- `offscreen` - Required for using ffmpeg.wasm in Chrome
 
 ## Privacy
 
