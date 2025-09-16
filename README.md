@@ -2,7 +2,7 @@
 
 Browser extension for downloading images and videos from Reddit posts. Supports individual downloads and mass downloading with auto-scrolling.
 
-<video src='https://github.com/sebastianwd/redditgrab/blob/update-readme/meta/demo.mp4' width="360px"></video>
+https://github.com/user-attachments/assets/35a07fed-9448-4369-b3c5-638a47ac93fa
 
 ## Features
 
