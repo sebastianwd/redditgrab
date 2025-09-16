@@ -17,7 +17,7 @@ export const getDownloadUrlsFromContainer = async (
       urls = await getGalleryImageUrls(mediaContainer);
       break;
     case "single-image":
-      const imageUrl = await getSingleImageUrl(mediaContainer);
+      const imageUrl = getSingleImageUrl(mediaContainer);
       if (imageUrl) {
         urls = [imageUrl];
       }

@@ -1,8 +1,4 @@
 /**
- * Utility functions for generating stable identifiers for Reddit posts
- */
-
-/**
  * Get a stable, unique identifier for a Reddit post
  * @param post - The Reddit post element (shreddit-post)
  * @returns A stable identifier string

@@ -1,4 +1,4 @@
-import { MESSAGE_TARGET, OFFSCREEN_KEYS } from "@/utils/contants";
+import { MESSAGE_TARGET, OFFSCREEN_KEYS } from "@/utils/constants";
 
 export type MediaContentType = "video" | "single-image" | "multiple-images";
 
@@ -8,6 +8,17 @@ export type DownloadVideoOptions = {
   subredditName: string;
   addTitleToVideo: boolean;
   postTitle: string;
+  filenamePattern: string;
+  offscreen?: boolean;
+};
+
+export type DownloadImageOptions = {
+  urls: string[];
+  folderDestination?: string;
+  subredditName?: string;
+  useGalleryFolders?: boolean;
+  addTitleToImages?: boolean;
+  postTitle?: string;
   filenamePattern: string;
   offscreen?: boolean;
 };
@@ -23,7 +34,12 @@ export interface DownloadVideoMessage extends BaseMessage {
   data: DownloadVideoOptions;
 }
 
-export type OffscreenMessage = DownloadVideoMessage;
+export interface DownloadImageMessage extends BaseMessage {
+  type: typeof OFFSCREEN_KEYS.DOWNLOAD_IMAGE;
+  data: DownloadImageOptions;
+}
+
+export type OffscreenMessage = DownloadVideoMessage | DownloadImageMessage;
 
 // Background message types (responses from offscreen)
 export interface DownloadVideoResponseMessage extends BaseMessage {
@@ -34,7 +50,17 @@ export interface DownloadVideoResponseMessage extends BaseMessage {
   };
 }
 
-export type BackgroundMessage = DownloadVideoResponseMessage;
+export interface DownloadImageResponseMessage extends BaseMessage {
+  type: typeof OFFSCREEN_KEYS.DOWNLOAD_IMAGE;
+  data: {
+    url: string;
+    filename: string;
+  }[];
+}
+
+export type BackgroundMessage =
+  | DownloadVideoResponseMessage
+  | DownloadImageResponseMessage;
 
 // Type guards
 export function isOffscreenMessage(message: any): message is OffscreenMessage {

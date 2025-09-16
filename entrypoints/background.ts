@@ -65,39 +65,40 @@ async function handleDownloadRequest(data: DownloadRequestMessage) {
     data.mediaContentType === "multiple-images" ||
     data.mediaContentType === "single-image"
   ) {
-    await downloadGalleryImages(
-      data.urls,
+    const downloadGalleryImagesOptions = {
+      urls: data.urls,
       folderDestination,
       subredditName,
-      data.useGalleryFolders,
-      data.addTitleToImages,
-      data.postTitle
-    );
-    return;
+      useGalleryFolders: data.useGalleryFolders,
+      addTitleToImages: data.addTitleToImages,
+      postTitle: data.postTitle,
+      filenamePattern: await filenamePattern.getValue(),
+    } as const satisfies Parameters<typeof downloadGalleryImages>[0];
+
+    if (browser.offscreen) {
+      await offscreenDownloadGalleryImages(downloadGalleryImagesOptions);
+      return;
+    }
+    await downloadGalleryImages(downloadGalleryImagesOptions);
   }
 
   if (data.mediaContentType === "video") {
     logger.log("downloading video", data.urls[0]);
 
-    if (browser.offscreen) {
-      await offscreenDownloadVideo({
-        url: data.urls[0],
-        folderDestination,
-        subredditName,
-        addTitleToVideo: data.addTitleToVideos,
-        postTitle: data.postTitle || "",
-        filenamePattern: await filenamePattern.getValue(),
-      });
-      return;
-    }
-
-    await downloadVideo({
+    const downloadVideoOptions = {
       url: data.urls[0],
       folderDestination,
       subredditName,
       addTitleToVideo: data.addTitleToVideos,
       postTitle: data.postTitle || "",
       filenamePattern: await filenamePattern.getValue(),
-    });
+    } as const satisfies Parameters<typeof downloadVideo>[0];
+
+    if (browser.offscreen) {
+      await offscreenDownloadVideo(downloadVideoOptions);
+      return;
+    }
+
+    await downloadVideo(downloadVideoOptions);
   }
 }

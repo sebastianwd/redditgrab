@@ -1,4 +1,4 @@
-import { MESSAGE_TARGET, OFFSCREEN_KEYS } from "@/utils/contants";
+import { MESSAGE_TARGET, OFFSCREEN_KEYS } from "@/utils/constants";
 import { OffscreenMessage, isOffscreenMessage } from "@/types";
 
 browser.runtime.onMessage.addListener((message: any) => {
@@ -23,8 +23,18 @@ function handleMessages(message: OffscreenMessage) {
       });
 
       break;
+    case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
+      downloadGalleryImages({
+        ...message.data,
+        offscreen: true,
+      }).then((result) => {
+        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_IMAGE, result);
+      });
+      break;
     default:
-      console.warn(`Unexpected message received: '${message.type}'.`);
+      console.warn(
+        `Unexpected message received: '${JSON.stringify(message)}'.`
+      );
       return;
   }
 }

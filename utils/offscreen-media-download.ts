@@ -1,5 +1,9 @@
-import { DownloadVideoOptions, isBackgroundMessage } from "@/types";
-import { OFFSCREEN_DOCUMENT_PATH } from "@/utils/contants";
+import {
+  DownloadImageOptions,
+  DownloadVideoOptions,
+  isBackgroundMessage,
+} from "@/types";
+import { OFFSCREEN_DOCUMENT_PATH } from "@/utils/constants";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -42,14 +46,23 @@ export const offscreenDownloadVideo = async (
   await browser.runtime.sendMessage({
     type: OFFSCREEN_KEYS.DOWNLOAD_VIDEO,
     target: MESSAGE_TARGET.OFFSCREEN,
-    data: {
-      url: options.url,
-      folderDestination: options.folderDestination,
-      subredditName: options.subredditName,
-      addTitleToVideo: options.addTitleToVideo,
-      postTitle: options.postTitle,
-      filenamePattern: options.filenamePattern,
-    },
+    data: options,
+  });
+};
+
+export const offscreenDownloadGalleryImages = async (
+  options: Omit<DownloadImageOptions, "offscreen">
+) => {
+  if (!browser.offscreen) {
+    return;
+  }
+
+  await createOffscreenDocument();
+
+  await browser.runtime.sendMessage({
+    type: OFFSCREEN_KEYS.DOWNLOAD_IMAGE,
+    target: MESSAGE_TARGET.OFFSCREEN,
+    data: options,
   });
 };
 
@@ -66,7 +79,20 @@ export async function handleOffscreenMessages(message: any) {
         saveAs: false,
       });
       break;
+    case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
+      await Promise.all(
+        message.data.map((item) =>
+          browser.downloads.download({
+            url: item.url,
+            filename: item.filename,
+            saveAs: false,
+          })
+        )
+      );
+      break;
     default:
-      console.warn(`Unexpected message received: '${message.type}'.`);
+      console.warn(
+        `Unexpected message received: '${JSON.stringify(message)}'.`
+      );
   }
 }

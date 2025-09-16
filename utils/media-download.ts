@@ -1,7 +1,8 @@
-import { addTextToImage, addTextToVideo } from "./image-utils";
+import { addTextToImage, addTextToVideo } from "./text-overlays";
 import { logger } from "./logger";
 import { createBlobUrl } from "./blob-utils";
-import { DownloadVideoOptions } from "@/types";
+import { DownloadImageOptions, DownloadVideoOptions } from "@/types";
+import { compact } from "es-toolkit";
 
 export const getRedGifsUrl = (mediaElement: Element): string | null => {
   let embed: Element | null = null;
@@ -93,19 +94,21 @@ async function getRemoteFile(url: string) {
   };
 }
 
-export async function downloadGalleryImages(
-  urls: string[],
-  folderDestination: string = "Reddit Downloads",
-  subredditName: string = "unknown",
-  useGalleryFolders: boolean = false,
-  addTitleToImages: boolean = false,
-  postTitle?: string
-) {
+export async function downloadGalleryImages(options: DownloadImageOptions) {
+  const {
+    urls,
+    folderDestination = "Reddit Downloads",
+    subredditName = "unknown",
+    useGalleryFolders = false,
+    addTitleToImages = false,
+    filenamePattern = "{subreddit}_{timestamp}_{filename}",
+    postTitle,
+    offscreen = false,
+  } = options;
+
   logger.log("Downloading gallery images:", urls);
 
-  // Get filename pattern from storage
-  const pattern =
-    (await filenamePattern.getValue()) || "{subreddit}_{timestamp}_{filename}";
+  const pattern = filenamePattern;
 
   // Create gallery folder name if using gallery folders
   const galleryFolderSuffix =
@@ -118,7 +121,7 @@ export async function downloadGalleryImages(
       ? `${folderDestination}/${subredditName}${galleryFolderSuffix}`
       : folderDestination;
 
-  await Promise.all(
+  const results = await Promise.all(
     urls.map(async (url, index) => {
       let { extension, blob } = await getRemoteFile(url);
 
@@ -160,7 +163,12 @@ export async function downloadGalleryImages(
       // Convert blob to data URL for Chrome Manifest V3 compatibility
       const dataUrl = await createBlobUrl(blob);
 
-      // Trigger browser download with configured folder
+      if (offscreen) {
+        return {
+          url: dataUrl,
+          filename: `${finalFolderDestination}/${finalFilename}`,
+        };
+      }
       await browser.downloads.download({
         url: dataUrl,
         filename: `${finalFolderDestination}/${finalFilename}`,
@@ -168,6 +176,10 @@ export async function downloadGalleryImages(
       });
     })
   );
+
+  if (offscreen) {
+    return compact(results);
+  }
 }
 
 export async function downloadVideo(options: DownloadVideoOptions) {
