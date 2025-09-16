@@ -2,6 +2,8 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { logger } from "./logger";
 
 import workerURL from "@ffmpeg/ffmpeg/worker?worker&url";
+import { createOffscreenDocument } from "@/utils/offscreen-media-download";
+import { onMessage, sendMessage } from "webext-bridge/background";
 
 const FFMPEG_OPTIONS = {
   coreURL: browser.runtime.getURL("/ffmpeg/ffmpeg-core.js"),

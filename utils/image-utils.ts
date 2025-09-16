@@ -1,7 +1,3 @@
-/**
- * Utility functions for image and video processing
- */
-
 import { fetchFile } from "@ffmpeg/util";
 
 /**
@@ -227,7 +223,7 @@ export async function addTextToVideo(
       );
     } catch (e) {}
 
-    return new Blob([data], { type: "video/mp4" });
+    return new Blob([data as BlobPart], { type: "video/mp4" });
   } catch (error) {
     console.error("FFmpeg video processing failed:", error);
     throw error;

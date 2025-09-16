@@ -1,5 +1,7 @@
 import { addTextToImage, addTextToVideo } from "./image-utils";
 import { logger } from "./logger";
+import { createBlobUrl } from "./blob-utils";
+import { DownloadVideoOptions } from "@/types";
 
 export const getRedGifsUrl = (mediaElement: Element): string | null => {
   let embed: Element | null = null;
@@ -123,16 +125,23 @@ export async function downloadGalleryImages(
       // Apply text overlay if enabled and we have a title
       if (addTitleToImages && postTitle && extension !== "gif") {
         try {
+          logger.log("Adding text overlay to image:", {
+            postTitle,
+            extension,
+            blobSize: blob.size,
+          });
           blob = await addTextToImage(blob, postTitle);
           // Change extension to PNG since we're converting the image
           extension = "png";
+          logger.log(
+            "Text overlay added successfully, new blob size:",
+            blob.size
+          );
         } catch (error) {
           logger.error("Failed to add text to image:", error);
           // Continue with original image if overlay fails
         }
       }
-
-      const objectUrl = URL.createObjectURL(blob);
 
       // Generate filename using pattern
       const filename = generateFilename(pattern, {
@@ -148,9 +157,12 @@ export async function downloadGalleryImages(
           ? `${index + 1}_${filename}`
           : filename;
 
+      // Convert blob to data URL for Chrome Manifest V3 compatibility
+      const dataUrl = await createBlobUrl(blob);
+
       // Trigger browser download with configured folder
       await browser.downloads.download({
-        url: objectUrl,
+        url: dataUrl,
         filename: `${finalFolderDestination}/${finalFilename}`,
         saveAs: false,
       });
@@ -158,36 +170,37 @@ export async function downloadGalleryImages(
   );
 }
 
-export async function downloadVideo(
-  url: string,
-  folderDestination: string = "Reddit Downloads",
-  subredditName: string = "unknown",
-  addTitleToVideo: boolean = false,
-  postTitle?: string
-) {
+export async function downloadVideo(options: DownloadVideoOptions) {
+  const {
+    url: initialUrl,
+    folderDestination = "Reddit Downloads",
+    subredditName = "unknown",
+    addTitleToVideo = false,
+    postTitle,
+    filenamePattern,
+    offscreen = false,
+  } = options;
+
   try {
-    logger.log("Downloading video:", url);
+    const getSourceUrl = async () => {
+      logger.log("Downloading video:", initialUrl);
 
-    if (url.includes(".m3u8")) {
-      // Check if it's a RedGIFs HLS stream
-      if (url.includes("api.redgifs.com")) {
-        const hlsUrl = await getRedGifsHLSVideoUrl(url);
-        logger.log("RedGIFs complete video URL:", hlsUrl);
-        url = hlsUrl;
-      } else {
-        // Reddit HLS stream
-        const hlsUrl = await getHLSVideoUrl(url);
-        logger.log("Reddit hlsUrl", hlsUrl);
-        url = hlsUrl;
+      if (initialUrl.includes(".m3u8")) {
+        if (initialUrl.includes("api.redgifs.com")) {
+          const hlsUrl = await getRedGifsHLSVideoUrl(initialUrl);
+          return hlsUrl;
+        } else {
+          const hlsUrl = await getHLSVideoUrl(initialUrl);
+          return hlsUrl;
+        }
       }
-    }
+      return initialUrl;
+    };
 
-    // Get filename pattern from storage
-    const pattern =
-      (await filenamePattern.getValue()) ||
-      "{subreddit}_{timestamp}_{filename}";
+    const url = await getSourceUrl();
 
-    // Generate filename using pattern
+    const pattern = filenamePattern || "{subreddit}_{timestamp}_{filename}";
+
     const filename = generateFilename(pattern, {
       subreddit: subredditName,
       timestamp: getCurrentTimestamp(),
@@ -200,30 +213,35 @@ export async function downloadVideo(
       try {
         logger.log("Adding text overlay to video:", postTitle);
 
-        // Fetch the video
         const response = await fetch(url);
         const videoBlob = await response.blob();
 
-        // Add text overlay
         const processedVideoBlob = await addTextToVideo(videoBlob, postTitle);
 
-        // Create object URL for the processed video
-        const objectUrl = URL.createObjectURL(processedVideoBlob);
+        const dataUrl = await createBlobUrl(processedVideoBlob);
 
-        // Download the processed video
+        if (offscreen) {
+          return {
+            url: dataUrl,
+            filename: `${folderDestination}/${filename}`,
+          };
+        }
         await browser.downloads.download({
-          url: objectUrl,
+          url: dataUrl,
           filename: `${folderDestination}/${filename}`,
           saveAs: false,
         });
-
-        logger.log("Video with text overlay downloaded successfully");
       } catch (error) {
         logger.error(
           "Failed to add text to video, downloading original:",
           error
         );
-        // Fallback to original video if processing fails
+        if (offscreen) {
+          return {
+            url,
+            filename: `${folderDestination}/${filename}`,
+          };
+        }
         await browser.downloads.download({
           url,
           filename: `${folderDestination}/${filename}`,
@@ -231,7 +249,12 @@ export async function downloadVideo(
         });
       }
     } else {
-      // Download original video without processing
+      if (offscreen) {
+        return {
+          url,
+          filename: `${folderDestination}/${filename}`,
+        };
+      }
       await browser.downloads.download({
         url,
         filename: `${folderDestination}/${filename}`,
@@ -321,8 +344,8 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
       } catch (e) {}
     }
 
-    const blob = new Blob([finalVideo], { type: "video/mp4" });
-    const blobUrl = URL.createObjectURL(blob);
+    const blob = new Blob([finalVideo as BlobPart], { type: "video/mp4" });
+    const blobUrl = await createBlobUrl(blob);
 
     logger.log("RedGIFs video processed successfully:", blobUrl);
     return blobUrl;
@@ -368,7 +391,6 @@ function parseRedGifsPlaylist(playlistText: string) {
   return { initSegment, segments };
 }
 
-// Download segment with byte range
 async function downloadSegmentWithByteRange(
   url: string,
   byteRange: string
@@ -403,11 +425,9 @@ export async function getHLSVideoUrl(m3u8Url: string) {
   const tsFile = new Uint8Array(await videoResponse.arrayBuffer());
   await ffmpeg.writeFile("video.ts", tsFile);
 
-  // Check if audioUrl is empty or null
   const hasAudio = audioUrl && audioUrl.trim() !== "";
 
   if (hasAudio) {
-    // Process video with audio
     const audioResponse = await fetch(audioUrl.replace(".m3u8", ".aac"));
     const audioFile = new Uint8Array(await audioResponse.arrayBuffer());
     await ffmpeg.writeFile("audio.ts", audioFile);
@@ -422,7 +442,6 @@ export async function getHLSVideoUrl(m3u8Url: string) {
       "output.mp4",
     ]);
   } else {
-    // Process video only (no audio)
     logger.log("No audio URL provided, processing video only");
     await ffmpeg.exec(["-i", "video.ts", "-c", "copy", "output.mp4"]);
   }
@@ -430,7 +449,7 @@ export async function getHLSVideoUrl(m3u8Url: string) {
   const videoData = await ffmpeg.readFile("output.mp4");
   const buffer = new Uint8Array(videoData as unknown as ArrayBuffer);
   const blob = new Blob([buffer], { type: "video/mp4" });
-  const objectUrl = URL.createObjectURL(blob);
+  const objectUrl = await createBlobUrl(blob);
   return objectUrl;
 }
 

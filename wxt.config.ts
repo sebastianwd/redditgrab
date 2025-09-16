@@ -17,6 +17,7 @@ export default defineConfig({
       "storage",
       "scripting",
       "tabs",
+      ...(browser === "chrome" ? ["offscreen"] : []),
     ],
     host_permissions: [
       "*://*.reddit.com/*",

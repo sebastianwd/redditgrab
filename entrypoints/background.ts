@@ -1,9 +1,9 @@
-import type { MediaContentType } from "~/types";
-import { onMessage, sendMessage } from "webext-bridge/background";
+import { onMessage } from "webext-bridge/background";
 import { DownloadRequestMessage } from "@/types/shim";
-import { logger } from "@/utils/logger";
 
 export default defineBackground(() => {
+  browser.runtime.onMessage.addListener(handleOffscreenMessages);
+
   onMessage("DOWNLOAD_REQUEST", async ({ data }) => {
     try {
       await handleDownloadRequest(data);
@@ -73,18 +73,31 @@ async function handleDownloadRequest(data: DownloadRequestMessage) {
       data.addTitleToImages,
       data.postTitle
     );
+    return;
   }
 
   if (data.mediaContentType === "video") {
     logger.log("downloading video", data.urls[0]);
-    await downloadVideo(
-      data.urls[0],
+
+    if (browser.offscreen) {
+      await offscreenDownloadVideo({
+        url: data.urls[0],
+        folderDestination,
+        subredditName,
+        addTitleToVideo: data.addTitleToVideos,
+        postTitle: data.postTitle || "",
+        filenamePattern: await filenamePattern.getValue(),
+      });
+      return;
+    }
+
+    await downloadVideo({
+      url: data.urls[0],
       folderDestination,
       subredditName,
-      data.addTitleToVideos,
-      data.postTitle
-    );
+      addTitleToVideo: data.addTitleToVideos,
+      postTitle: data.postTitle || "",
+      filenamePattern: await filenamePattern.getValue(),
+    });
   }
-
-  logger.log("Request data:", data);
 }
