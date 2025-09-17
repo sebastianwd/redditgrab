@@ -11,11 +11,9 @@ export default defineConfig({
     description: "Grab images and videos from Reddit posts",
     version: "1.0.0",
     permissions: [
-      "webRequest",
       "downloads",
       "activeTab",
       "storage",
-      "scripting",
       "tabs",
       ...(browser === "chrome" ? ["offscreen"] : []),
     ],
