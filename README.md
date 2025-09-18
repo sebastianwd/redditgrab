@@ -1,8 +1,22 @@
-# RedditGrab
+<div align="center">
+  <img alt="logo" src="https://i.imgur.com/DK822L5.png" height="128" />
+  <h1>RedditGrab</h1>
+  <p>
+    <a href="https://addons.mozilla.org/en-US/firefox/addon/media-downloader-redditgrab" target="_blank">
+      <img alt="mozilla" src="https://img.shields.io/badge/Firefox-FF7139?style=for-the-badge&logo=Firefox-Browser&logoColor=white" />
+    </a>
+  </p>
+</div>
 
 Browser extension for downloading images and videos from Reddit posts. Supports individual downloads and mass downloading with auto-scrolling.
 
-https://github.com/user-attachments/assets/35a07fed-9448-4369-b3c5-638a47ac93fa
+## Preview
+
+https://github.com/user-attachments/assets/d8c7845f-e114-4788-b5de-24ad2c0ae4de
+
+![alt text](meta/preview-1.png)
+![alt text](meta/preview-2.png)
+![alt text](meta/preview-3.png)
 
 ## Features
 
@@ -11,28 +25,6 @@ https://github.com/user-attachments/assets/35a07fed-9448-4369-b3c5-638a47ac93fa
 - Customizable download settings and folder organization
 - Title overlay on images and videos
 - Image processing with FFmpeg
-
-## Prerequisites
-
-- Node.js 22+
-- pnpm
-
-## Setup
-
-1. Clone and install dependencies:
-
-   ```bash
-   git clone <repository-url>
-   cd redditgrab
-   pnpm install
-   ```
-
-2. Development:
-   ```bash
-   pnpm dev          # Start development server
-   pnpm build        # Build for production
-   pnpm build:firefox # Build for Firefox
-   ```
 
 ## Usage
 
@@ -59,13 +51,17 @@ https://github.com/user-attachments/assets/35a07fed-9448-4369-b3c5-638a47ac93fa
 
 Built with [WXT](https://wxt.dev/) and React.
 
-### Scripts
+### Prerequisites
+
+- Node.js 22+
+- pnpm
+
+#### Commands
 
 - `pnpm dev` - Development server
 - `pnpm dev:firefox` - Firefox development
-- `pnpm build` - Production build
-- `pnpm build:firefox` - Firefox build
 - `pnpm zip` - Create distribution zip
+- `pnpm zip:firefox` - Create distribution zip for Firefox
 
 ### Structure
 
@@ -82,11 +78,9 @@ public/                    # Static assets
 
 ## Permissions
 
-- `webRequest` - Download media files
 - `downloads` - Save files
 - `activeTab` - Interact with Reddit
 - `storage` - Save settings
-- `scripting` - Inject buttons
 - `tabs` - Query active tab
 - `offscreen` - Required for using ffmpeg.wasm in Chrome
 
