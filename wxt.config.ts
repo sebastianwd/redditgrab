@@ -7,9 +7,10 @@ import topLevelAwait from "vite-plugin-top-level-await";
 export default defineConfig({
   modules: ["@wxt-dev/module-react"],
   manifest: ({ browser }) => ({
-    name: "RedditGrab",
-    description: "Grab images and videos from Reddit posts",
-    version: "1.0.1",
+    name: "Downloader for Reddit - RedditGrab",
+    description:
+      "Download images and videos from Reddit posts (including Redgifs)",
+    version: "1.0.2",
     permissions: [
       "downloads",
       "activeTab",
