@@ -12,7 +12,7 @@ Browser extension for downloading images and videos from Reddit posts. Supports 
 
 ## Preview
 
-https://github.com/user-attachments/assets/d8c7845f-e114-4788-b5de-24ad2c0ae4de
+https://github.com/user-attachments/assets/4295d7c0-3b2f-450c-9ec5-53dab86b150d
 
 ![alt text](meta/preview-1.png)
 ![alt text](meta/preview-2.png)
