@@ -2,7 +2,7 @@
   "name": "redditgrab",
   "description": "RedditGrab - Grab images and videos from Reddit posts",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

@@ -9,7 +9,7 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: "RedditGrab",
     description: "Grab images and videos from Reddit posts",
-    version: "1.0.0",
+    version: "1.0.1",
     permissions: [
       "downloads",
       "activeTab",
