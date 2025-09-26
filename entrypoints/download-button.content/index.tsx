@@ -79,6 +79,7 @@ export default defineContentScript({
             append: "last",
             onMount: (container) => {
               const app = document.createElement("div");
+              container.className = "ml-auto w-fit bg-transparent";
               container.append(app);
               const root = ReactDOM.createRoot(app);
               root.render(
