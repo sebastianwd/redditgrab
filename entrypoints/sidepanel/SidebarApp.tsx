@@ -743,6 +743,13 @@ function SidebarApp() {
           </AccordionItem>
         </Accordion>
       </div>
+
+      {/* Version number */}
+      <div className="mt-auto pt-4 border-t border-gray-200">
+        <div className="text-center">
+          <p className="text-xs text-gray-500">RedditGrab v1.0.2</p>
+        </div>
+      </div>
     </div>
   );
 }
