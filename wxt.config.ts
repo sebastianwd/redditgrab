@@ -5,7 +5,7 @@ import topLevelAwait from "vite-plugin-top-level-await";
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
-  modules: ["@wxt-dev/module-react"],
+  modules: ["@wxt-dev/module-react", "@wxt-dev/auto-icons"],
   manifest: ({ browser }) => ({
     name: "Downloader for Reddit - RedditGrab",
     description:
