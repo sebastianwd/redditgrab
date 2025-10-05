@@ -4,9 +4,21 @@ import type { MediaContentType } from "~/types";
 import DownloadButton from "@/components/download-button";
 import { onMessage } from "webext-bridge/content-script";
 import { Selectors } from "@/utils/constants";
-import { processedPostIds } from "@/utils/storage";
+import {
+  processedPostIds,
+  useDateRange,
+  dateRangeStart,
+  dateRangeEnd,
+} from "@/utils/storage";
 import { compact } from "es-toolkit";
 import { logger } from "@/utils/logger";
+import { parseISO, isValid } from "date-fns";
+import {
+  getPostTitle,
+  getPostAuthor,
+  getPostDate,
+  getPostDatetime,
+} from "@/utils/post-utils";
 
 const scrollToLoadMore = () => {
   window.scrollTo({
@@ -14,6 +26,63 @@ const scrollToLoadMore = () => {
     behavior: "smooth",
   });
   logger.log("Scrolled to bottom to load more posts");
+};
+
+const isPostInDateRange = (
+  post: Element,
+  startTimestamp?: string,
+  endTimestamp?: string
+): boolean => {
+  if (!startTimestamp && !endTimestamp) return true;
+
+  try {
+    // Get the post datetime using shared function
+    const datetime = getPostDatetime(post);
+    if (!datetime) {
+      logger.log("No datetime found for post, including in range");
+      return true; // If we can't determine date, include it
+    }
+
+    // Parse the post date using date-fns
+    const postDate = parseISO(datetime);
+    if (!isValid(postDate)) {
+      logger.log(`Invalid post date format: ${datetime}, including in range`);
+      return true;
+    }
+
+    const postTimestamp = postDate.getTime();
+
+    // Parse start and end timestamps if provided
+    const start = startTimestamp ? parseInt(startTimestamp) : null;
+    const end = endTimestamp ? parseInt(endTimestamp) : null;
+
+    // Validate parsed timestamps
+    if (start && isNaN(start)) {
+      logger.log(
+        `Invalid start timestamp: ${startTimestamp}, including in range`
+      );
+      return true;
+    }
+
+    if (end && isNaN(end)) {
+      logger.log(`Invalid end timestamp: ${endTimestamp}, including in range`);
+      return true;
+    }
+
+    // Check if post is before start timestamp
+    if (start && postTimestamp < start) {
+      return false;
+    }
+
+    // Check if post is after end timestamp
+    if (end && postTimestamp > end) {
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error("Error checking post date range:", error);
+    return true; // If there's an error, include the post
+  }
 };
 
 export default defineContentScript({
@@ -79,7 +148,9 @@ export default defineContentScript({
             append: "last",
             onMount: (container) => {
               const app = document.createElement("div");
-              container.className = "ml-auto w-fit bg-transparent";
+              container.className = cn(
+                "ml-auto w-fit bg-transparent float-right"
+              );
               container.append(app);
               const root = ReactDOM.createRoot(app);
               root.render(
@@ -124,6 +195,15 @@ export default defineContentScript({
       const processedIds = await processedPostIds.getValue();
       const processedSet = new Set(processedIds);
 
+      // Get date range settings
+      const useDateRangeFilter = await useDateRange.getValue();
+      const startDate = useDateRangeFilter
+        ? await dateRangeStart.getValue()
+        : undefined;
+      const endDate = useDateRangeFilter
+        ? await dateRangeEnd.getValue()
+        : undefined;
+
       const mediaUrls = compact(
         await Promise.all(
           Array.from(posts).map(async (post, index) => {
@@ -138,12 +218,24 @@ export default defineContentScript({
                 return null;
               }
 
+              // Check if post is within date range
+              if (!isPostInDateRange(post, startDate, endDate)) {
+                logger.log(`Skipping post outside date range: ${uniqueId}`);
+                return null;
+              }
+
               const subredditName = getSubredditNameFromContainer(
                 mediaContainer.element.closest("shreddit-post") ||
                   mediaContainer.element
               );
 
               mediaCount++;
+              console.log(
+                "sdfsdf",
+                getPostTitle(post),
+                getPostAuthor(post),
+                getPostDate(post)
+              );
               return {
                 urls: await getDownloadUrlsFromContainer(
                   mediaContainer.element,
@@ -153,6 +245,8 @@ export default defineContentScript({
                 subredditName,
                 mediaPostId: uniqueId,
                 postTitle: getPostTitle(post),
+                postAuthor: getPostAuthor(post),
+                postDate: getPostDate(post),
               };
             }
 

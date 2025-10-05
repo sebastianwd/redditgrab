@@ -11,6 +11,8 @@ export interface ScanPageMediaMessage {
       subredditName: string;
       mediaPostId: string;
       postTitle?: string;
+      postAuthor?: string;
+      postDate?: string;
     }[];
   };
 }

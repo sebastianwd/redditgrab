@@ -83,8 +83,6 @@ async function handleDownloadRequest(data: DownloadRequestMessage) {
   }
 
   if (data.mediaContentType === "video") {
-    logger.log("downloading video", data.urls[0]);
-
     const downloadVideoOptions = {
       url: data.urls[0],
       folderDestination,
