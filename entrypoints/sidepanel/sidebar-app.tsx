@@ -1,10 +1,17 @@
 import { useState, useEffect, useRef } from "react";
+import { useForm } from "react-hook-form";
+import { arktypeResolver } from "@hookform/resolvers/arktype";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   folderDestination as folderDestinationStorage,
   filenamePattern as filenamePatternStorage,
   useGalleryFolders as useGalleryFoldersStorage,
   addTitleToImages as addTitleToImagesStorage,
   addTitleToVideos as addTitleToVideosStorage,
+  useDateRange as useDateRangeStorage,
+  dateRangeStart as dateRangeStartStorage,
+  dateRangeEnd as dateRangeEndStorage,
+  darkMode as darkModeStorage,
 } from "@/utils/storage";
 import { debounce } from "es-toolkit";
 import { sendMessage } from "webext-bridge/popup";
@@ -13,13 +20,25 @@ import { processedPostIds } from "@/utils/storage";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Icon } from "@iconify/react";
 import { logger } from "@/utils/logger";
+import { SettingsSchema, type SettingsFormData } from "@/types/settings-schema";
+import { FAQ } from "@/components/faq";
+import { processFolderDestination } from "@/utils/post-utils";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
   await folderDestinationStorage.setValue(value);
@@ -41,55 +60,133 @@ const debouncedSaveTitleToVideos = debounce(async (value: boolean) => {
   await addTitleToVideosStorage.setValue(value);
 }, 500);
 
-function SidebarApp() {
-  logger.log("SidebarApp component rendering...");
+const debouncedSaveUseDateRange = debounce(async (value: boolean) => {
+  await useDateRangeStorage.setValue(value);
+}, 500);
 
-  const [folderDestination, setFolderDestination] = useState(
-    "Reddit Downloads/{subreddit}"
-  );
-  const [filenamePattern, setFilenamePattern] = useState(
-    "{subreddit}_{timestamp}_{filename}"
-  );
-  const [useGalleryFolders, setUseGalleryFolders] = useState(false);
-  const [addTitleToImages, setAddTitleToImages] = useState(false);
-  const [addTitleToVideos, setAddTitleToVideos] = useState(false);
+const debouncedSaveDateRangeStart = debounce(
+  async (value: number | undefined) => {
+    await dateRangeStartStorage.setValue(value ? value.toString() : "");
+  },
+  500
+);
+
+const debouncedSaveDateRangeEnd = debounce(
+  async (value: number | undefined) => {
+    await dateRangeEndStorage.setValue(value ? value.toString() : "");
+  },
+  500
+);
+
+function SidebarApp() {
+  const form = useForm<SettingsFormData>({
+    resolver: arktypeResolver(SettingsSchema),
+    mode: "onChange", // Validate on every change
+    reValidateMode: "onChange", // Re-validate on every change
+    defaultValues: {
+      folderDestination: "Reddit Downloads/{subreddit}/{date}",
+      filenamePattern: "{subreddit}_{timestamp}_{filename}",
+      useGalleryFolders: false,
+      addTitleToImages: false,
+      addTitleToVideos: false,
+      useDateRange: false,
+      dateRangeStart: undefined,
+      dateRangeEnd: undefined,
+    },
+  });
+
+  console.log("form", form.formState.errors);
+
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [currentUrl, setCurrentUrl] = useState<string>("");
   const [isRedditPage, setIsRedditPage] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
+  // Load values from storage into form
   useEffect(() => {
-    filenamePatternStorage.getValue().then((value) => {
-      if (value) {
-        setFilenamePattern(value);
+    const loadSettings = async () => {
+      const [
+        folderDestination,
+        filenamePattern,
+        useGalleryFolders,
+        addTitleToImages,
+        addTitleToVideos,
+        useDateRange,
+        dateRangeStart,
+        dateRangeEnd,
+        darkMode,
+      ] = await Promise.all([
+        folderDestinationStorage.getValue(),
+        filenamePatternStorage.getValue(),
+        useGalleryFoldersStorage.getValue(),
+        addTitleToImagesStorage.getValue(),
+        addTitleToVideosStorage.getValue(),
+        useDateRangeStorage.getValue(),
+        dateRangeStartStorage.getValue(),
+        dateRangeEndStorage.getValue(),
+        darkModeStorage.getValue(),
+      ]);
+
+      console.log("dateRangeStart", dateRangeStart);
+      console.log("dateRangeEnd", dateRangeEnd);
+
+      form.reset({
+        folderDestination:
+          folderDestination || "Reddit Downloads/{subreddit}/{date}",
+        filenamePattern:
+          filenamePattern || "{subreddit}_{timestamp}_{filename}",
+        useGalleryFolders: useGalleryFolders || false,
+        addTitleToImages: addTitleToImages || false,
+        addTitleToVideos: addTitleToVideos || false,
+        useDateRange: useDateRange || false,
+        dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
+        dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
+      });
+
+      // Set dark mode
+      setIsDarkMode(darkMode || false);
+      document.documentElement.classList.toggle("dark", darkMode || false);
+    };
+
+    loadSettings();
+  }, [form]);
+
+  // Watch form changes and save to storage
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name) {
+        switch (name) {
+          case "folderDestination":
+            debouncedSaveFolder(value.folderDestination || "");
+            break;
+          case "filenamePattern":
+            debouncedSaveFilename(value.filenamePattern || "");
+            break;
+          case "useGalleryFolders":
+            debouncedSaveGalleryFolders(value.useGalleryFolders || false);
+            break;
+          case "addTitleToImages":
+            debouncedSaveTitleToImages(value.addTitleToImages || false);
+            break;
+          case "addTitleToVideos":
+            debouncedSaveTitleToVideos(value.addTitleToVideos || false);
+            break;
+          case "useDateRange":
+            debouncedSaveUseDateRange(value.useDateRange || false);
+            break;
+          case "dateRangeStart":
+            debouncedSaveDateRangeStart(value.dateRangeStart);
+            form.trigger(["dateRangeStart", "dateRangeEnd"]);
+            break;
+          case "dateRangeEnd":
+            debouncedSaveDateRangeEnd(value.dateRangeEnd);
+            form.trigger(["dateRangeStart", "dateRangeEnd"]);
+            break;
+        }
       }
     });
-  }, []);
-
-  useEffect(() => {
-    folderDestinationStorage.getValue().then((value) => {
-      if (value) {
-        setFolderDestination(value);
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    useGalleryFoldersStorage.getValue().then((value) => {
-      setUseGalleryFolders(value);
-    });
-  }, []);
-
-  useEffect(() => {
-    addTitleToImagesStorage.getValue().then((value) => {
-      setAddTitleToImages(value);
-    });
-  }, []);
-
-  useEffect(() => {
-    addTitleToVideosStorage.getValue().then((value) => {
-      setAddTitleToVideos(value);
-    });
-  }, []);
+    return () => subscription.unsubscribe();
+  }, [form]);
 
   // Check if current tab is on Reddit
   useEffect(() => {
@@ -164,36 +261,6 @@ function SidebarApp() {
   // Ref to control continuous processing loop
   const shouldContinueProcessingRef = useRef(false);
 
-  const handleFolderDestinationChange = (value: string) => {
-    logger.log("setting folder destination to", value);
-    setFolderDestination(value);
-    debouncedSaveFolder(value);
-  };
-
-  const handleFilenamePatternChange = (value: string) => {
-    logger.log("setting filename pattern to", value);
-    setFilenamePattern(value);
-    debouncedSaveFilename(value);
-  };
-
-  const handleGalleryFoldersChange = (checked: boolean) => {
-    logger.log("setting gallery folders to", checked);
-    setUseGalleryFolders(checked);
-    debouncedSaveGalleryFolders(checked);
-  };
-
-  const handleTitleToImagesChange = (checked: boolean) => {
-    logger.log("setting title to images to", checked);
-    setAddTitleToImages(checked);
-    debouncedSaveTitleToImages(checked);
-  };
-
-  const handleTitleToVideosChange = (checked: boolean) => {
-    logger.log("setting title to videos to", checked);
-    setAddTitleToVideos(checked);
-    debouncedSaveTitleToVideos(checked);
-  };
-
   const handleMassScrape = async () => {
     try {
       const [tab] = await browser.tabs.query({
@@ -243,15 +310,16 @@ function SidebarApp() {
           }
 
           try {
-            // Calculate folder destination with subreddit substitution
-            const finalFolderDestination = folderDestination?.includes(
-              "{subreddit}"
-            )
-              ? folderDestination.replace(
-                  /{subreddit}/g,
-                  mediaItem.subredditName
-                )
-              : folderDestination || "Reddit Downloads";
+            // Calculate folder destination with variable substitution
+            const currentFolderDestination =
+              form.getValues("folderDestination");
+            const finalFolderDestination = processFolderDestination(
+              currentFolderDestination,
+              null, // No post element available in sidebar
+              mediaItem.subredditName,
+              mediaItem.postDate,
+              mediaItem.postAuthor
+            );
 
             logger.log(
               `Downloading ${i + 1}/${mediaUrls.length}: ${
@@ -289,9 +357,9 @@ function SidebarApp() {
                 urls: mediaItem.urls,
                 folderDestination: finalFolderDestination,
                 subredditName: mediaItem.subredditName,
-                useGalleryFolders,
-                addTitleToImages,
-                addTitleToVideos,
+                useGalleryFolders: form.getValues("useGalleryFolders"),
+                addTitleToImages: form.getValues("addTitleToImages"),
+                addTitleToVideos: form.getValues("addTitleToVideos"),
                 postTitle: mediaItem.postTitle,
               },
               "background"
@@ -324,10 +392,6 @@ function SidebarApp() {
 
         const newPostsFound = mediaUrls.length > 0;
         logger.log(`Batch complete! Downloaded ${mediaUrls.length} new posts.`);
-        logger.log(
-          "shouldContinueProcessingRef.current:",
-          shouldContinueProcessingRef.current
-        );
         setCurrentPostInfo(null);
 
         // Continue processing if scraping is still active
@@ -396,6 +460,13 @@ function SidebarApp() {
     } finally {
       setIsClearingHistory(false);
     }
+  };
+
+  const handleToggleDarkMode = async () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    document.documentElement.classList.toggle("dark", newDarkMode);
+    await darkModeStorage.setValue(newDarkMode);
   };
 
   // Show different content if not on Reddit
@@ -473,100 +544,213 @@ function SidebarApp() {
 
   return (
     <div
-      className="w-full h-full min-h-screen p-4 bg-gradient-to-br from-gray-50 to-white"
+      className="w-full h-full min-h-screen p-4 bg-gradient-to-br from-gray-50 to-white dark:from-gray-900 dark:to-gray-800"
       style={{ minWidth: "300px" }}
     >
       <div className="text-center mb-6">
-        <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-2">
-          <Icon icon="lucide:download" className="text-white w-5 h-5" />
+        <div className="flex justify-center items-center mb-2 relative">
+          <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
+            <Icon icon="lucide:download" className="text-white w-5 h-5" />
+          </div>
+          <Button
+            onClick={handleToggleDarkMode}
+            variant="ghost"
+            size="sm"
+            className="p-2 absolute right-0"
+          >
+            <Icon
+              icon={isDarkMode ? "lucide:sun" : "lucide:moon"}
+              className="w-4 h-4 text-gray-600 dark:text-gray-300"
+            />
+          </Button>
         </div>
-        <h1 className="text-lg font-bold text-gray-800 mb-1">RedditGrab</h1>
-        <p className="text-xs text-gray-500">
+        <h1 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-1">
+          RedditGrab
+        </h1>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Grab images and videos from Reddit posts
         </p>
       </div>
 
-      <div className="space-y-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Download Folder
-          </label>
-          <input
-            type="text"
-            value={folderDestination}
-            onChange={(e) => handleFolderDestinationChange(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
-            placeholder="Enter folder name"
+      <Form {...form}>
+        <div className="space-y-4 mb-6">
+          <FormField
+            control={form.control}
+            name="folderDestination"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Download Folder</FormLabel>
+                <FormControl>
+                  <input
+                    type="text"
+                    {...field}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="Enter folder name"
+                  />
+                </FormControl>
+                <FormDescription>
+                  Available: {"{subreddit}"}, {"{date}"},
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="text-blue-600 cursor-help">
+                          {" {user}"}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          May not work on all pages (works best on subreddit
+                          pages)
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Available variables: {"{subreddit}"}
-          </p>
-        </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Filename Pattern
-          </label>
-          <input
-            type="text"
-            value={filenamePattern}
-            onChange={(e) => handleFilenamePatternChange(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors"
-            placeholder="{subreddit}_{timestamp}_{filename}"
+          <FormField
+            control={form.control}
+            name="filenamePattern"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Filename Pattern</FormLabel>
+                <FormControl>
+                  <input
+                    type="text"
+                    {...field}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                    placeholder="{subreddit}_{timestamp}_{filename}"
+                  />
+                </FormControl>
+                <FormDescription>
+                  Available: {"{subreddit}"}, {"{timestamp}"}, {"{filename}"}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
           />
-          <p className="text-xs text-gray-500 mt-1">
-            Available: {"{subreddit}"}, {"{timestamp}"}, {"{filename}"}
-          </p>
-        </div>
 
-        <div className="flex items-center space-x-3">
-          <Checkbox
-            id="gallery-folders"
-            checked={useGalleryFolders}
-            onCheckedChange={handleGalleryFoldersChange}
+          <FormField
+            control={form.control}
+            name="useGalleryFolders"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Create folders for image galleries</FormLabel>
+                </div>
+              </FormItem>
+            )}
           />
-          <div className="grid gap-1.5 leading-none">
-            <label
-              htmlFor="gallery-folders"
-              className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Create folders for image galleries
-            </label>
-          </div>
-        </div>
 
-        <div className="flex items-center space-x-3">
-          <Checkbox
-            id="title-to-images"
-            checked={addTitleToImages}
-            onCheckedChange={handleTitleToImagesChange}
+          <FormField
+            control={form.control}
+            name="addTitleToImages"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Add post title to images</FormLabel>
+                </div>
+              </FormItem>
+            )}
           />
-          <div className="grid gap-1.5 leading-none">
-            <label
-              htmlFor="title-to-images"
-              className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Add post title to images
-            </label>
-          </div>
-        </div>
 
-        <div className="flex items-center space-x-3">
-          <Checkbox
-            id="title-to-videos"
-            checked={addTitleToVideos}
-            onCheckedChange={handleTitleToVideosChange}
+          <FormField
+            control={form.control}
+            name="addTitleToVideos"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>
+                    Add post title to videos (slower processing)
+                  </FormLabel>
+                </div>
+              </FormItem>
+            )}
           />
-          <div className="grid gap-1.5 leading-none">
-            <label
-              htmlFor="title-to-videos"
-              className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Add post title to videos (slower processing)
-            </label>
-          </div>
+
+          <FormField
+            control={form.control}
+            name="useDateRange"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none">
+                  <FormLabel>Filter posts by date range</FormLabel>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          {form.watch("useDateRange") && (
+            <div className="space-y-3 ml-6 border-l-2 border-gray-200 pl-4">
+              <FormField
+                control={form.control}
+                name="dateRangeStart"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Date</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        {...field}
+                        placeholder="Select start date"
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dateRangeEnd"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>End Date</FormLabel>
+                    <FormControl>
+                      <DatePicker
+                        {...field}
+                        placeholder="Select end date"
+                        useEndOfDay={true}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-colors bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Only posts from this date range will be downloaded
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
         </div>
-      </div>
+      </Form>
 
       <div className="space-y-3">
         {!scrapingStatus.isScraping ? (
@@ -587,13 +771,13 @@ function SidebarApp() {
 
         {/* Progress Display */}
         {scrapingStatus.isScraping && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-3">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium text-blue-800">
+              <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
                 Progress: {scrapingStatus.downloadedCount}/
                 {scrapingStatus.totalPostsFound}
               </span>
-              <span className="text-xs text-blue-600">
+              <span className="text-xs text-blue-600 dark:text-blue-300">
                 {scrapingStatus.totalPostsFound > 0
                   ? Math.round(
                       (scrapingStatus.downloadedCount /
@@ -637,7 +821,7 @@ function SidebarApp() {
 
       {/* Status Info */}
       <div className="mt-6 text-center">
-        <p className="text-xs text-gray-500 mb-2">
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
           {scrapingStatus.isScraping
             ? "Auto-scrolling and downloading media posts..."
             : "This will scroll and download all media on the page"}
@@ -666,88 +850,44 @@ function SidebarApp() {
         )}
       </div>
 
-      {/* FAQ Section */}
-      <div className="mt-8 border-t border-gray-200 pt-4">
-        <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
-          <Icon icon="lucide:help-circle" className="w-4 h-4 mr-2" />
-          Frequently Asked Questions
-        </h3>
+      <FAQ />
 
-        <Accordion type="multiple" className="w-full">
-          <AccordionItem value="item-1">
-            <AccordionTrigger className="text-xs font-medium text-gray-800 hover:no-underline">
-              <div className="flex items-center space-x-2">
-                <Icon
-                  icon="lucide:download"
-                  className="w-4 h-4 text-orange-500 flex-shrink-0"
-                />
-                <span>Can I download individual post media?</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-3">
-                <p className="text-xs text-gray-600">
-                  Yes! Look for the{" "}
-                  <span className="font-medium text-orange-600">Download</span>{" "}
-                  button that appears on each post. Click it to download just
-                  that post's media.
-                </p>
-
-                <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
-                  <div className="text-center">
-                    <img
-                      src="/example-post.png"
-                      alt="Example Reddit post showing Download button"
-                      className="w-full max-w-sm mx-auto rounded-lg shadow-sm border border-gray-300"
-                    />
-                  </div>
-                </div>
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="item-2">
-            <AccordionTrigger className="text-xs font-medium text-gray-800 hover:no-underline">
-              <div className="flex items-center space-x-2">
-                <Icon
-                  icon="lucide:settings"
-                  className="w-4 h-4 text-blue-500 flex-shrink-0"
-                />
-                <span>How do I customize download settings?</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <p className="text-xs text-gray-600">
-                Use the settings above to change download folder, filename
-                patterns, and other options. Changes are saved automatically.
-              </p>
-            </AccordionContent>
-          </AccordionItem>
-
-          <AccordionItem value="item-3">
-            <AccordionTrigger className="text-xs font-medium text-gray-800 hover:no-underline">
-              <div className="flex items-center space-x-2">
-                <Icon
-                  icon="lucide:folder"
-                  className="w-4 h-4 text-green-500 flex-shrink-0"
-                />
-                <span>Where are files downloaded?</span>
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <p className="text-xs text-gray-600">
-                Files are saved to your default Downloads folder, organized by
-                the folder pattern you set above.
-              </p>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
-      </div>
-
-      {/* Version number */}
-      <div className="mt-auto pt-4 border-t border-gray-200">
-        <div className="text-center">
-          <p className="text-xs text-gray-500">RedditGrab v1.0.2</p>
+      {/* Version number and links */}
+      <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="text-center space-y-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            RedditGrab v1.0.3
+          </p>
+          <div className="space-y-1 flex flex-col items-center">
+            <a
+              href="https://github.com/sebastianwd/redditgrab"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs underline text-blue-500 hover:text-blue-600 hover:underline transition-colors"
+            >
+              Source Code
+            </a>
+            {import.meta.env.BROWSER === "chrome" && (
+              <a
+                href="https://chromewebstore.google.com/detail/redditgrab/pkjhbflcnjikmfiiojcagjidbjeimkbj?hl=en"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs underline text-blue-500 hover:text-blue-600 hover:underline transition-colors"
+              >
+                Rate Extension
+              </a>
+            )}
+            {import.meta.env.BROWSER === "firefox" && (
+              <a
+                href="https://addons.mozilla.org/en-US/firefox/addon/media-downloader-redditgrab"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs underline text-blue-500 hover:text-blue-600 hover:underline transition-colors"
+              >
+                Rate Extension
+              </a>
+            )}
+          </div>
         </div>
       </div>
     </div>

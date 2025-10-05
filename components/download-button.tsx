@@ -9,6 +9,7 @@ import {
 import { sendMessage } from "webext-bridge/content-script";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
+import { getPostTitle, processFolderDestination } from "@/utils/post-utils";
 
 const DownloadButton = ({
   mediaContainer,
@@ -38,23 +39,18 @@ const DownloadButton = ({
       const addTitleToImages = await addTitleToImagesStorage.getValue();
       const addTitleToVideos = await addTitleToVideosStorage.getValue();
 
-      // Only include subreddit if the variable is present
-      const finalFolderDestination = latestFolderConfig?.includes("{subreddit}")
-        ? latestFolderConfig.replace(
-            /{subreddit}/g,
-            getSubredditNameFromContainer(
-              mediaContainer.closest("shreddit-post") || mediaContainer
-            )
-          )
-        : latestFolderConfig || "Reddit Downloads";
-
-      // Get subreddit name for filename pattern
+      // Process folder destination with variable substitution
+      const postElement = mediaContainer.closest("shreddit-post");
       const subredditName = getSubredditNameFromContainer(
-        mediaContainer.closest("shreddit-post") || mediaContainer
+        postElement || mediaContainer
+      );
+      const finalFolderDestination = processFolderDestination(
+        latestFolderConfig,
+        postElement,
+        subredditName
       );
 
       // Get post title if needed
-      const postElement = mediaContainer.closest("shreddit-post");
       const postTitle = postElement ? getPostTitle(postElement) : undefined;
 
       // Send message to background script to handle the download
@@ -92,16 +88,9 @@ const DownloadButton = ({
       size="sm"
       variant="secondary"
       disabled={isDownloading}
-      className="float-right mt-1 rounded-4xl relative cursor-pointer"
+      className="float-right mt-1 rounded-4xl relative cursor-pointer text-xs"
     >
-      {isDownloading ? (
-        <>
-          <Icon icon="lucide:loader-2" className="animate-spin mr-1 size-3" />
-          Downloading...
-        </>
-      ) : (
-        "Download"
-      )}
+      {isDownloading ? <>Downloading...</> : "Download"}
     </Button>
   );
 };

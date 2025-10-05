@@ -23,3 +23,19 @@ export const addTitleToImages = storage.defineItem("local:addTitleToImages", {
 export const addTitleToVideos = storage.defineItem("local:addTitleToVideos", {
   fallback: false,
 });
+
+export const useDateRange = storage.defineItem("local:useDateRange", {
+  fallback: false,
+});
+
+export const dateRangeStart = storage.defineItem("local:dateRangeStart", {
+  fallback: "",
+});
+
+export const dateRangeEnd = storage.defineItem("local:dateRangeEnd", {
+  fallback: "",
+});
+
+export const darkMode = storage.defineItem("local:darkMode", {
+  fallback: false,
+});

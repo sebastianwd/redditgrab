@@ -3,6 +3,8 @@
  * @param post - The Reddit post element (shreddit-post)
  * @returns A stable identifier string
  */
+import { getPostTitle, getPostAuthor } from "./post-utils";
+
 export const getPostIdentifier = (post: Element): string => {
   // Check if post already has our custom ID
   const existingId = post.getAttribute("data-wxt-media-id");
@@ -17,11 +19,8 @@ export const getPostIdentifier = (post: Element): string => {
   }
 
   // Fallback: create hash from post content (very rare case)
-  const postTitle =
-    post.querySelector('a[slot="title"]')?.textContent ||
-    post.querySelector('[id^="post-title-"]')?.textContent ||
-    "";
-  const postAuthor = post.querySelector('a[href*="/user/"]')?.textContent || "";
+  const postTitle = getPostTitle(post);
+  const postAuthor = getPostAuthor(post);
 
   if (!postTitle && !postAuthor) {
     // Last resort: use a timestamp-based ID
