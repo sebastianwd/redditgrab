@@ -425,6 +425,36 @@ async function downloadSegmentWithByteRange(
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/**
+ * Fetches a video file from a URL, trying .ts extension first and falling back to .mp4 if it fails.
+ * @param baseUrl The base URL (typically ending with .m3u8)
+ * @returns A Uint8Array containing the video file data
+ * @throws Error if both .ts and .mp4 attempts fail
+ */
+async function fetchVideoWithFallback(baseUrl: string): Promise<Uint8Array> {
+  const tsUrl = baseUrl.replace(".m3u8", ".ts");
+  const mp4Url = baseUrl.replace(".m3u8", ".mp4");
+
+  try {
+    const response = await fetch(tsUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch .ts file: ${response.status}`);
+    }
+    const videoFile = new Uint8Array(await response.arrayBuffer());
+    logger.log("Successfully fetched video with .ts extension");
+    return videoFile;
+  } catch (error) {
+    logger.log("Failed to fetch .ts file, trying .mp4:", error);
+    const response = await fetch(mp4Url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch .mp4 file: ${response.status}`);
+    }
+    const videoFile = new Uint8Array(await response.arrayBuffer());
+    logger.log("Successfully fetched video with .mp4 extension");
+    return videoFile;
+  }
+}
+
 export async function getHLSVideoUrl(m3u8Url: string) {
   const ffmpeg = await createFFmpeg();
 
@@ -433,9 +463,8 @@ export async function getHLSVideoUrl(m3u8Url: string) {
   logger.log("videoUrl", videoUrl);
   logger.log("audioUrl", audioUrl);
 
-  const videoResponse = await fetch(videoUrl.replace(".m3u8", ".ts"));
-  const tsFile = new Uint8Array(await videoResponse.arrayBuffer());
-  await ffmpeg.writeFile("video.ts", tsFile);
+  const videoFile = await fetchVideoWithFallback(videoUrl);
+  await ffmpeg.writeFile("video.ts", videoFile);
 
   const hasAudio = audioUrl && audioUrl.trim() !== "";
 
