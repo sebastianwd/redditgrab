@@ -97,7 +97,9 @@ export default defineContentScript({
       type: MediaContentType;
       element: Element;
     } | null => {
-      const hasVideo = element.querySelector(Selectors.VIDEO_PLAYER);
+      const hasVideo =
+        element.querySelector(Selectors.VIDEO_PLAYER) ||
+        element.querySelector(Selectors.VIDEO_PLAYER_2);
       const hasSingleImage = element.querySelector(Selectors.SINGLE_IMAGE);
       const hasMultipleImages = element.querySelector(
         Selectors.GALLERY_CAROUSEL
@@ -230,12 +232,7 @@ export default defineContentScript({
               );
 
               mediaCount++;
-              console.log(
-                "sdfsdf",
-                getPostTitle(post),
-                getPostAuthor(post),
-                getPostDate(post)
-              );
+
               return {
                 urls: await getDownloadUrlsFromContainer(
                   mediaContainer.element,

@@ -95,8 +95,6 @@ function SidebarApp() {
     },
   });
 
-  console.log("form", form.formState.errors);
-
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [currentUrl, setCurrentUrl] = useState<string>("");
   const [isRedditPage, setIsRedditPage] = useState(false);
@@ -510,7 +508,7 @@ function SidebarApp() {
           <div className="flex items-start space-x-3">
             <Icon
               icon="lucide:lightbulb"
-              className="text-blue-600 w-5 h-5 mt-0.5 flex-shrink-0"
+              className="text-blue-600 w-5 h-5 mt-0.5 shrink-0"
             />
             <div>
               <h3 className="text-sm font-medium text-blue-800 mb-2">
