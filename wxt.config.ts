@@ -53,5 +53,5 @@ export default defineConfig({
           "Cross-Origin-Embedder-Policy": "require-corp",
         },
       },
-    } as WxtViteConfig),
+    }) as WxtViteConfig,
 });

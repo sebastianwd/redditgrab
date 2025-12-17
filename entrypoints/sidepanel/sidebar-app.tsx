@@ -68,14 +68,14 @@ const debouncedSaveDateRangeStart = debounce(
   async (value: number | undefined) => {
     await dateRangeStartStorage.setValue(value ? value.toString() : "");
   },
-  500
+  500,
 );
 
 const debouncedSaveDateRangeEnd = debounce(
   async (value: number | undefined) => {
     await dateRangeEndStorage.setValue(value ? value.toString() : "");
   },
-  500
+  500,
 );
 
 function SidebarApp() {
@@ -211,7 +211,7 @@ function SidebarApp() {
     const handleTabUpdate = (
       tabId: number,
       changeInfo: Browser.tabs.OnUpdatedInfo,
-      tab: Browser.tabs.Tab
+      tab: Browser.tabs.Tab,
     ) => {
       if (changeInfo.url && tab.active) {
         setCurrentUrl(tab.url as string);
@@ -221,7 +221,7 @@ function SidebarApp() {
     };
 
     const handleTabActivated = async (
-      activeInfo: Browser.tabs.OnActivatedInfo
+      activeInfo: Browser.tabs.OnActivatedInfo,
     ) => {
       try {
         const tab = await browser.tabs.get(activeInfo.tabId);
@@ -279,12 +279,12 @@ function SidebarApp() {
         const response = await sendMessage(
           "SCAN_PAGE_MEDIA",
           undefined,
-          `content-script@${tab.id}`
+          `content-script@${tab.id}`,
         );
 
         logger.log(
           "Content script response:",
-          JSON.stringify(response, null, 2)
+          JSON.stringify(response, null, 2),
         );
 
         if (!response.success || !response.data) {
@@ -316,13 +316,13 @@ function SidebarApp() {
               null, // No post element available in sidebar
               mediaItem.subredditName,
               mediaItem.postDate,
-              mediaItem.postAuthor
+              mediaItem.postAuthor,
             );
 
             logger.log(
               `Downloading ${i + 1}/${mediaUrls.length}: ${
                 mediaItem.type
-              } with ${mediaItem.urls.length} URLs`
+              } with ${mediaItem.urls.length} URLs`,
             );
 
             // Update current post info and highlight
@@ -340,7 +340,7 @@ function SidebarApp() {
                   subredditName: mediaItem.subredditName,
                   mediaType: mediaItem.type,
                 },
-                `content-script@${tab.id}`
+                `content-script@${tab.id}`,
               );
             } catch (error) {
               console.warn("Failed to highlight post:", error);
@@ -360,7 +360,7 @@ function SidebarApp() {
                 addTitleToVideos: form.getValues("addTitleToVideos"),
                 postTitle: mediaItem.postTitle,
               },
-              "background"
+              "background",
             );
 
             if (downloadResponse?.success) {
@@ -397,7 +397,7 @@ function SidebarApp() {
           if (newPostsFound) {
             // Found new posts, check again soon for more
             logger.log(
-              "Found new posts, scheduling next check in 2 seconds..."
+              "Found new posts, scheduling next check in 2 seconds...",
             );
             setTimeout(() => {
               if (shouldContinueProcessingRef.current) {
@@ -410,10 +410,10 @@ function SidebarApp() {
             await sendMessage(
               "SCROLL_TO_LOAD_MORE",
               undefined,
-              `content-script@${tab.id}`
+              `content-script@${tab.id}`,
             );
             logger.log(
-              "Scrolled to load more posts, checking again in 3 seconds..."
+              "Scrolled to load more posts, checking again in 3 seconds...",
             );
             setTimeout(() => {
               if (shouldContinueProcessingRef.current) {
@@ -780,7 +780,7 @@ function SidebarApp() {
                   ? Math.round(
                       (scrapingStatus.downloadedCount /
                         scrapingStatus.totalPostsFound) *
-                        100
+                        100,
                     )
                   : 0}
                 %
