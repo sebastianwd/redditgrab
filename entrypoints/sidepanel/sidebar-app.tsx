@@ -854,7 +854,7 @@ function SidebarApp() {
       <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="text-center space-y-1">
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            RedditGrab v1.0.5
+            RedditGrab v1.0.6
           </p>
           <div className="space-y-1 flex flex-col items-center">
             <a
