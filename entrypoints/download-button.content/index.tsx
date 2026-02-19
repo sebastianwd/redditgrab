@@ -85,6 +85,15 @@ const isPostInDateRange = (
   }
 };
 
+const findVideoPlayer = (element: Element) => {
+  let el: Element | null = null;
+  for (const selector of Selectors.VIDEO_PLAYER) {
+    el = element.querySelector(selector);
+    if (el) break;
+  }
+  return el;
+};
+
 export default defineContentScript({
   matches: ["*://*.reddit.com/*"],
   cssInjectionMode: "ui",
@@ -97,9 +106,8 @@ export default defineContentScript({
       type: MediaContentType;
       element: Element;
     } | null => {
-      const hasVideo =
-        element.querySelector(Selectors.VIDEO_PLAYER) ||
-        element.querySelector(Selectors.VIDEO_PLAYER_2);
+      const hasVideo = findVideoPlayer(element);
+
       const hasSingleImage = element.querySelector(Selectors.SINGLE_IMAGE);
       const hasMultipleImages = element.querySelector(
         Selectors.GALLERY_CAROUSEL

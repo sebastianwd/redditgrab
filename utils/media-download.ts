@@ -22,7 +22,7 @@ export const getRedGifsUrl = (mediaElement: Element): string | null => {
   if (!htmlContent) return null;
 
   const iframeMatch = htmlContent.match(
-    /src="([^"]*redgifs\.com\/ifr\/([^"?]+))/
+    /src="([^"]*redgifs\.com\/ifr\/([^"?]+))/,
   );
   if (iframeMatch && iframeMatch[2]) {
     const redgifsId = iframeMatch[2];
@@ -36,7 +36,7 @@ export const getRedGifsUrl = (mediaElement: Element): string | null => {
 export function getSingleImageUrl(mediaElement: Element) {
   // Try hidden zoomable image (original full-res)
   const zoomable = mediaElement.querySelector<HTMLImageElement>(
-    ".lightboxed-content img"
+    ".lightboxed-content img",
   );
 
   if (zoomable && zoomable.src.startsWith("https://i.redd.it/")) {
@@ -48,6 +48,24 @@ export function getSingleImageUrl(mediaElement: Element) {
   return preview?.src;
 }
 
+/** Parse srcset (e.g. data-lazy-srcset) and return the URL for the largest width. */
+function getBestUrlFromLazySrcset(srcset: string | null): string | null {
+  if (!srcset?.trim()) return null;
+  let bestUrl: string | null = null;
+  let bestW = 0;
+  for (const part of srcset.split(",")) {
+    const [url, descriptor] = part.trim().split(/\s+/);
+    if (!url) continue;
+    const wMatch = descriptor?.match(/^(\d+)w$/);
+    const w = wMatch ? parseInt(wMatch[1], 10) : 0;
+    if (w >= bestW) {
+      bestW = w;
+      bestUrl = url;
+    }
+  }
+  return bestUrl;
+}
+
 export async function getGalleryImageUrls(mediaElement: Element) {
   logger.log("scraping gallery images for", mediaElement);
 
@@ -56,7 +74,7 @@ export async function getGalleryImageUrls(mediaElement: Element) {
   }
 
   const liElements = mediaElement.querySelectorAll<HTMLLIElement>(
-    "gallery-carousel ul li"
+    "gallery-carousel ul li",
   );
 
   const urls: string[] = [];
@@ -64,8 +82,12 @@ export async function getGalleryImageUrls(mediaElement: Element) {
   liElements.forEach((li) => {
     // pick the <figure> img (better quality than background one)
     const img = li.querySelector<HTMLImageElement>("figure img");
-    if (img?.src) {
-      urls.push(img.src);
+    const url =
+      img?.src ||
+      img?.getAttribute("data-lazy-src") ||
+      getBestUrlFromLazySrcset(img?.getAttribute("data-lazy-srcset") ?? null);
+    if (url) {
+      urls.push(url);
     }
   });
 
@@ -138,7 +160,7 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
           extension = "png";
           logger.log(
             "Text overlay added successfully, new blob size:",
-            blob.size
+            blob.size,
           );
         } catch (error) {
           logger.error("Failed to add text to image:", error);
@@ -174,7 +196,7 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
         filename: `${finalFolderDestination}/${finalFilename}`,
         saveAs: false,
       });
-    })
+    }),
   );
 
   if (offscreen) {
@@ -246,7 +268,7 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       } catch (error) {
         logger.error(
           "Failed to add text to video, downloading original:",
-          error
+          error,
         );
         if (offscreen) {
           return {
@@ -302,7 +324,7 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     if (initSegment) {
       const initData = await downloadSegmentWithByteRange(
         initSegment.uri,
-        initSegment.byteRange
+        initSegment.byteRange,
       );
       await ffmpeg.writeFile("init.m4s", initData);
       segmentFiles.push("init.m4s");
@@ -313,7 +335,7 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
       const segment = segments[i];
       const segmentData = await downloadSegmentWithByteRange(
         segment.uri,
-        segment.byteRange
+        segment.byteRange,
       );
       const filename = `segment_${i.toString().padStart(3, "0")}.m4s`;
       await ffmpeg.writeFile(filename, segmentData);
@@ -405,7 +427,7 @@ function parseRedGifsPlaylist(playlistText: string) {
 
 async function downloadSegmentWithByteRange(
   url: string,
-  byteRange: string
+  byteRange: string,
 ): Promise<Uint8Array> {
   const [length, offset] = byteRange.split("@").map(Number);
   const endByte = offset + length - 1;
@@ -418,7 +440,7 @@ async function downloadSegmentWithByteRange(
 
   if (!response.ok) {
     throw new Error(
-      `Failed to download segment: ${response.status} ${response.statusText}`
+      `Failed to download segment: ${response.status} ${response.statusText}`,
     );
   }
 
@@ -434,7 +456,7 @@ async function downloadSegmentWithByteRange(
  */
 async function fetchMediaWithFallback(
   baseUrl: string,
-  primaryExtension: string
+  primaryExtension: string,
 ): Promise<Uint8Array> {
   const primaryUrl = baseUrl.replace(".m3u8", primaryExtension);
   const mp4Url = baseUrl.replace(".m3u8", ".mp4");
@@ -443,7 +465,7 @@ async function fetchMediaWithFallback(
     const response = await fetch(primaryUrl);
     if (!response.ok) {
       throw new Error(
-        `Failed to fetch ${primaryExtension} file: ${response.status}`
+        `Failed to fetch ${primaryExtension} file: ${response.status}`,
       );
     }
     return new Uint8Array(await response.arrayBuffer());
@@ -594,7 +616,7 @@ export async function getVideoUrl(mediaElement: Element) {
 
   // Pick the largest resolution (by width)
   const best = mp4s.reduce((a, b) =>
-    b.source.dimensions.width > a.source.dimensions.width ? b : a
+    b.source.dimensions.width > a.source.dimensions.width ? b : a,
   );
 
   return best.source.url;
