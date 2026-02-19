@@ -10,7 +10,7 @@ export default defineConfig({
     name: "Downloader for Reddit - RedditGrab",
     description:
       "Download images and videos from Reddit posts (including Redgifs)",
-    version: "1.0.6",
+    version: "1.0.7",
     permissions: [
       "downloads",
       "activeTab",

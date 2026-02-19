@@ -30,7 +30,7 @@ const DownloadButton = ({
     try {
       const urls = await getDownloadUrlsFromContainer(
         mediaContainer,
-        mediaContentType
+        mediaContentType,
       );
 
       // Get the latest settings from storage
@@ -42,12 +42,12 @@ const DownloadButton = ({
       // Process folder destination with variable substitution
       const postElement = mediaContainer.closest("shreddit-post");
       const subredditName = getSubredditNameFromContainer(
-        postElement || mediaContainer
+        postElement || mediaContainer,
       );
       const finalFolderDestination = processFolderDestination(
         latestFolderConfig,
         postElement,
-        subredditName
+        subredditName,
       );
 
       // Get post title if needed
@@ -67,7 +67,7 @@ const DownloadButton = ({
           addTitleToVideos,
           postTitle,
         },
-        "background"
+        "background",
       );
 
       if (downloadResponse?.success) {
