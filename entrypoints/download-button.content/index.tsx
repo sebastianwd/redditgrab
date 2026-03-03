@@ -13,6 +13,7 @@ import {
 import { compact } from "es-toolkit";
 import { logger } from "@/utils/logger";
 import { parseISO, isValid } from "date-fns";
+import { getPostIdentifier, setPostIdentifier } from "@/utils/post-identifier";
 import {
   getPostTitle,
   getPostAuthor,
@@ -20,18 +21,26 @@ import {
   getPostDatetime,
 } from "@/utils/post-utils";
 
-const scrollToLoadMore = () => {
-  window.scrollTo({
-    top: document.body.scrollHeight,
-    behavior: "smooth",
-  });
-  logger.log("Scrolled to bottom to load more posts");
+const scrollToLoadMore = (scrollUp: boolean) => {
+  if (scrollUp) {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+    logger.log("Scrolled to top to load newer posts");
+  } else {
+    window.scrollTo({
+      top: document.body.scrollHeight,
+      behavior: "smooth",
+    });
+    logger.log("Scrolled to bottom to load more posts");
+  }
 };
 
 const isPostInDateRange = (
   post: Element,
   startTimestamp?: string,
-  endTimestamp?: string
+  endTimestamp?: string,
 ): boolean => {
   if (!startTimestamp && !endTimestamp) return true;
 
@@ -59,7 +68,7 @@ const isPostInDateRange = (
     // Validate parsed timestamps
     if (start && isNaN(start)) {
       logger.log(
-        `Invalid start timestamp: ${startTimestamp}, including in range`
+        `Invalid start timestamp: ${startTimestamp}, including in range`,
       );
       return true;
     }
@@ -101,7 +110,7 @@ export default defineContentScript({
     const mountedUIs = new Set();
 
     const getMediaContainer = (
-      element: Element
+      element: Element,
     ): {
       type: MediaContentType;
       element: Element;
@@ -110,7 +119,7 @@ export default defineContentScript({
 
       const hasSingleImage = element.querySelector(Selectors.SINGLE_IMAGE);
       const hasMultipleImages = element.querySelector(
-        Selectors.GALLERY_CAROUSEL
+        Selectors.GALLERY_CAROUSEL,
       );
       const hasRedGifs = element.querySelector(Selectors.REDGIFS_EMBED);
 
@@ -159,7 +168,7 @@ export default defineContentScript({
             onMount: (container) => {
               const app = document.createElement("div");
               container.className = cn(
-                "ml-auto w-fit bg-transparent float-right"
+                "ml-auto w-fit bg-transparent float-right",
               );
               container.append(app);
               const root = ReactDOM.createRoot(app);
@@ -167,7 +176,7 @@ export default defineContentScript({
                 <DownloadButton
                   mediaContainer={mediaContainer.element}
                   mediaContentType={mediaContainer.type}
-                />
+                />,
               );
               return root;
             },
@@ -178,7 +187,7 @@ export default defineContentScript({
 
           ui.mount();
           mountedUIs.add(element);
-        })
+        }),
       );
 
       logger.log(`Attached buttons to ${elements.length} elements`);
@@ -197,8 +206,64 @@ export default defineContentScript({
 
     window.addEventListener("scroll", handleScroll, { passive: true });
 
-    onMessage("SCAN_PAGE_MEDIA", async () => {
-      const posts = document.querySelectorAll("shreddit-post");
+    onMessage("GET_CURRENT_POST_ID", async () => {
+      const posts = Array.from(document.querySelectorAll("shreddit-post"));
+      const viewportCenterY = window.innerHeight / 2;
+
+      for (const post of posts) {
+        setPostIdentifier(post);
+      }
+
+      // Find the post that contains the vertical center of the viewport
+      for (const post of posts) {
+        const rect = post.getBoundingClientRect();
+        if (rect.top <= viewportCenterY && rect.bottom >= viewportCenterY) {
+          return { success: true, postId: getPostIdentifier(post) };
+        }
+      }
+
+      // Fallback: first post that intersects viewport (smallest top >= 0)
+      let best: { post: Element; top: number } | null = null;
+      for (const post of posts) {
+        const rect = post.getBoundingClientRect();
+        if (rect.bottom >= 0 && rect.top <= window.innerHeight) {
+          if (!best || rect.top < best.top) best = { post, top: rect.top };
+        }
+      }
+      if (best) {
+        return { success: true, postId: getPostIdentifier(best.post) };
+      }
+
+      return { success: false };
+    });
+
+    onMessage("SCAN_PAGE_MEDIA", async ({ data }) => {
+      const { scrollUp = false, anchorPostId } = data ?? {};
+
+      let postsArray = Array.from(document.querySelectorAll("shreddit-post"));
+
+      // When scroll up with anchor: only consider the anchor post and posts above it (lower index = above)
+      if (scrollUp && anchorPostId) {
+        let anchorIndex = -1;
+        for (let i = 0; i < postsArray.length; i++) {
+          setPostIdentifier(postsArray[i]);
+          if (getPostIdentifier(postsArray[i]) === anchorPostId) {
+            anchorIndex = i;
+            break;
+          }
+        }
+        if (anchorIndex >= 0) {
+          postsArray = postsArray.slice(0, anchorIndex + 1).toReversed();
+          logger.log(
+            `Scroll up: limiting to current and above, downloading bottom-to-top (anchor index ${anchorIndex}, ${postsArray.length} posts)`,
+          );
+        } else {
+          logger.warn(
+            `Scroll up: anchor post ${anchorPostId} not found, scanning all posts`,
+          );
+        }
+      }
+
       let mediaCount = 0;
 
       // Get already processed post IDs from storage
@@ -216,7 +281,7 @@ export default defineContentScript({
 
       const mediaUrls = compact(
         await Promise.all(
-          Array.from(posts).map(async (post, index) => {
+          postsArray.map(async (post, index) => {
             const mediaContainer = getMediaContainer(post);
 
             if (mediaContainer) {
@@ -236,7 +301,7 @@ export default defineContentScript({
 
               const subredditName = getSubredditNameFromContainer(
                 mediaContainer.element.closest("shreddit-post") ||
-                  mediaContainer.element
+                  mediaContainer.element,
               );
 
               mediaCount++;
@@ -244,7 +309,7 @@ export default defineContentScript({
               return {
                 urls: await getDownloadUrlsFromContainer(
                   mediaContainer.element,
-                  mediaContainer.type
+                  mediaContainer.type,
                 ),
                 type: mediaContainer.type,
                 subredditName,
@@ -256,8 +321,8 @@ export default defineContentScript({
             }
 
             return null;
-          })
-        )
+          }),
+        ),
       );
 
       return {
@@ -273,7 +338,7 @@ export default defineContentScript({
       const { mediaPostId, subredditName, mediaType } = data;
 
       const currentPost = document.querySelector(
-        `[data-wxt-media-id="${mediaPostId}"]`
+        `[data-wxt-media-id="${mediaPostId}"]`,
       ) as HTMLElement;
 
       if (currentPost) {
@@ -324,8 +389,9 @@ export default defineContentScript({
     });
 
     // Handle scroll to load more posts
-    onMessage("SCROLL_TO_LOAD_MORE", async () => {
-      scrollToLoadMore();
+    onMessage("SCROLL_TO_LOAD_MORE", async ({ data }) => {
+      const { scrollUp = false } = data ?? {};
+      scrollToLoadMore(scrollUp);
 
       // Wait a bit for content to load
       await new Promise((resolve) => setTimeout(resolve, 2000));

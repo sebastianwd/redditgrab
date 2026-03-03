@@ -50,12 +50,22 @@ export interface DownloadRequestResponse {
 
 declare module "webext-bridge" {
   export interface ProtocolMap {
-    SCAN_PAGE_MEDIA: ProtocolWithReturn<void, ScanPageMediaMessage>;
+    SCAN_PAGE_MEDIA: ProtocolWithReturn<
+      { scrollUp?: boolean; anchorPostId?: string },
+      ScanPageMediaMessage
+    >;
+    GET_CURRENT_POST_ID: ProtocolWithReturn<
+      void,
+      { success: boolean; postId?: string }
+    >;
     HIGHLIGHT_CURRENT_POST: ProtocolWithReturn<
       HighlightPostMessage,
       HighlightPostResponse
     >;
-    SCROLL_TO_LOAD_MORE: ProtocolWithReturn<void, ScrollToLoadMoreResponse>;
+    SCROLL_TO_LOAD_MORE: ProtocolWithReturn<
+      { scrollUp?: boolean },
+      ScrollToLoadMoreResponse
+    >;
     DOWNLOAD_REQUEST: ProtocolWithReturn<
       DownloadRequestMessage,
       DownloadRequestResponse

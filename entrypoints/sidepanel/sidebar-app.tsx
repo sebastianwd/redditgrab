@@ -99,6 +99,7 @@ function SidebarApp() {
   const [currentUrl, setCurrentUrl] = useState<string>("");
   const [isRedditPage, setIsRedditPage] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [massDownloadScrollUp, setMassDownloadScrollUp] = useState(false);
 
   // Load values from storage into form
   useEffect(() => {
@@ -275,10 +276,31 @@ function SidebarApp() {
       logger.log("Starting mass scraping from sidebar");
 
       const processPage = async () => {
+        let scanPayload: {
+          scrollUp?: boolean;
+          anchorPostId?: string;
+        } = { scrollUp: massDownloadScrollUp };
+
+        if (massDownloadScrollUp) {
+          try {
+            const anchorRes = await sendMessage(
+              "GET_CURRENT_POST_ID",
+              undefined,
+              `content-script@${tab.id}`,
+            );
+            if (anchorRes?.success && anchorRes.postId) {
+              scanPayload.anchorPostId = anchorRes.postId;
+              logger.log("Scroll up: using anchor post", anchorRes.postId);
+            }
+          } catch (e) {
+            logger.warn("Could not get current post id for scroll up", e);
+          }
+        }
+
         // Ask content script to scan for media using webext-bridge
         const response = await sendMessage(
           "SCAN_PAGE_MEDIA",
-          undefined,
+          scanPayload,
           `content-script@${tab.id}`,
         );
 
@@ -406,20 +428,27 @@ function SidebarApp() {
               }
             }, 2000);
           } else {
-            logger.log("No new posts found, scrolling to load more...");
-            await sendMessage(
-              "SCROLL_TO_LOAD_MORE",
-              undefined,
-              `content-script@${tab.id}`,
-            );
-            logger.log(
-              "Scrolled to load more posts, checking again in 3 seconds...",
-            );
-            setTimeout(() => {
-              if (shouldContinueProcessingRef.current) {
-                processPage();
-              }
-            }, 3000);
+            if (massDownloadScrollUp) {
+              logger.log(
+                "No new posts found; reached the top. Mass download complete.",
+              );
+              stopScraping();
+            } else {
+              logger.log("No new posts found, scrolling to load more...");
+              await sendMessage(
+                "SCROLL_TO_LOAD_MORE",
+                { scrollUp: massDownloadScrollUp },
+                `content-script@${tab.id}`,
+              );
+              logger.log(
+                "Scrolled to load more posts, checking again in 3 seconds...",
+              );
+              setTimeout(() => {
+                if (shouldContinueProcessingRef.current) {
+                  processPage();
+                }
+              }, 3000);
+            }
           }
         } else {
           logger.log("Processing stopped by user");
@@ -765,6 +794,23 @@ function SidebarApp() {
             <Icon icon="lucide:square" className="w-4 h-4" />
             Stop Scraping
           </Button>
+        )}
+        {!scrapingStatus.isScraping && (
+          <div className="flex flex-row items-center space-x-2 pl-1">
+            <Checkbox
+              id="mass-download-scroll-up"
+              checked={massDownloadScrollUp}
+              onCheckedChange={(checked) =>
+                setMassDownloadScrollUp(checked === true)
+              }
+            />
+            <label
+              htmlFor="mass-download-scroll-up"
+              className="text-xs text-gray-500 dark:text-gray-400 leading-none cursor-pointer select-none"
+            >
+              Scroll up from current post
+            </label>
+          </div>
         )}
 
         {/* Progress Display */}
