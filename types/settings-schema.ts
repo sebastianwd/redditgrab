@@ -11,6 +11,7 @@ export const SettingsSchema = type({
   useGalleryFolders: "boolean",
   addTitleToImages: "boolean",
   addTitleToVideos: "boolean",
+  markDownloadedAsVisited: "boolean",
   useDateRange: "boolean",
   // Accept number or undefined for timestamps, validate in pipe
   "dateRangeStart?": "number | undefined",

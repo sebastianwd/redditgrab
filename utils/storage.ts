@@ -39,3 +39,8 @@ export const dateRangeEnd = storage.defineItem("local:dateRangeEnd", {
 export const darkMode = storage.defineItem("local:darkMode", {
   fallback: false,
 });
+
+export const markDownloadedAsVisited = storage.defineItem(
+  "local:markDownloadedAsVisited",
+  { fallback: false },
+);

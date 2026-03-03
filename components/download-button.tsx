@@ -5,7 +5,9 @@ import {
   useGalleryFolders as useGalleryFoldersStorage,
   addTitleToImages as addTitleToImagesStorage,
   addTitleToVideos as addTitleToVideosStorage,
+  markDownloadedAsVisited as markDownloadedAsVisitedStorage,
 } from "@/utils/storage";
+import { markPostAsVisited } from "@/utils/mark-visited";
 import { sendMessage } from "webext-bridge/content-script";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
@@ -71,6 +73,12 @@ const DownloadButton = ({
       );
 
       if (downloadResponse?.success) {
+        if (
+          (await markDownloadedAsVisitedStorage.getValue()) &&
+          postElement
+        ) {
+          markPostAsVisited(postElement);
+        }
       } else if (downloadResponse?.success === false) {
         console.error("Download request failed:", downloadResponse);
       }

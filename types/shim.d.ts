@@ -58,6 +58,10 @@ declare module "webext-bridge" {
       void,
       { success: boolean; postId?: string }
     >;
+    MARK_POST_VISITED: ProtocolWithReturn<
+      { mediaPostId: string },
+      { success: boolean }
+    >;
     HIGHLIGHT_CURRENT_POST: ProtocolWithReturn<
       HighlightPostMessage,
       HighlightPostResponse

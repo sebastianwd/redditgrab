@@ -13,6 +13,7 @@ import {
 import { compact } from "es-toolkit";
 import { logger } from "@/utils/logger";
 import { parseISO, isValid } from "date-fns";
+import { markPostAsVisited } from "@/utils/mark-visited";
 import { getPostIdentifier, setPostIdentifier } from "@/utils/post-identifier";
 import {
   getPostTitle,
@@ -234,6 +235,18 @@ export default defineContentScript({
         return { success: true, postId: getPostIdentifier(best.post) };
       }
 
+      return { success: false };
+    });
+
+    onMessage("MARK_POST_VISITED", async ({ data }) => {
+      const { mediaPostId } = data;
+      const post = document.querySelector(
+        `[data-wxt-media-id="${mediaPostId}"]`,
+      );
+      if (post) {
+        markPostAsVisited(post);
+        return { success: true };
+      }
       return { success: false };
     });
 

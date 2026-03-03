@@ -8,6 +8,7 @@ import {
   useGalleryFolders as useGalleryFoldersStorage,
   addTitleToImages as addTitleToImagesStorage,
   addTitleToVideos as addTitleToVideosStorage,
+  markDownloadedAsVisited as markDownloadedAsVisitedStorage,
   useDateRange as useDateRangeStorage,
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
@@ -60,6 +61,13 @@ const debouncedSaveTitleToVideos = debounce(async (value: boolean) => {
   await addTitleToVideosStorage.setValue(value);
 }, 500);
 
+const debouncedSaveMarkDownloadedAsVisited = debounce(
+  async (value: boolean) => {
+    await markDownloadedAsVisitedStorage.setValue(value);
+  },
+  500,
+);
+
 const debouncedSaveUseDateRange = debounce(async (value: boolean) => {
   await useDateRangeStorage.setValue(value);
 }, 500);
@@ -89,6 +97,7 @@ function SidebarApp() {
       useGalleryFolders: false,
       addTitleToImages: false,
       addTitleToVideos: false,
+      markDownloadedAsVisited: false,
       useDateRange: false,
       dateRangeStart: undefined,
       dateRangeEnd: undefined,
@@ -110,6 +119,7 @@ function SidebarApp() {
         useGalleryFolders,
         addTitleToImages,
         addTitleToVideos,
+        markDownloadedAsVisited,
         useDateRange,
         dateRangeStart,
         dateRangeEnd,
@@ -120,6 +130,7 @@ function SidebarApp() {
         useGalleryFoldersStorage.getValue(),
         addTitleToImagesStorage.getValue(),
         addTitleToVideosStorage.getValue(),
+        markDownloadedAsVisitedStorage.getValue(),
         useDateRangeStorage.getValue(),
         dateRangeStartStorage.getValue(),
         dateRangeEndStorage.getValue(),
@@ -137,6 +148,7 @@ function SidebarApp() {
         useGalleryFolders: useGalleryFolders || false,
         addTitleToImages: addTitleToImages || false,
         addTitleToVideos: addTitleToVideos || false,
+        markDownloadedAsVisited: markDownloadedAsVisited || false,
         useDateRange: useDateRange || false,
         dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
         dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
@@ -169,6 +181,11 @@ function SidebarApp() {
             break;
           case "addTitleToVideos":
             debouncedSaveTitleToVideos(value.addTitleToVideos || false);
+            break;
+          case "markDownloadedAsVisited":
+            debouncedSaveMarkDownloadedAsVisited(
+              value.markDownloadedAsVisited || false,
+            );
             break;
           case "useDateRange":
             debouncedSaveUseDateRange(value.useDateRange || false);
@@ -396,6 +413,18 @@ function SidebarApp() {
                   ...currentProcessedIds,
                   mediaItem.mediaPostId,
                 ]);
+              }
+
+              if (form.getValues("markDownloadedAsVisited")) {
+                try {
+                  await sendMessage(
+                    "MARK_POST_VISITED",
+                    { mediaPostId: mediaItem.mediaPostId },
+                    `content-script@${tab.id}`,
+                  );
+                } catch (e) {
+                  console.warn("Failed to mark post as visited:", e);
+                }
               }
             } else {
               console.error(`Download ${i + 1} failed:`, downloadResponse);
@@ -711,6 +740,36 @@ function SidebarApp() {
                   <FormLabel>
                     Add post title to videos (slower processing)
                   </FormLabel>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="markDownloadedAsVisited"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Mark downloaded posts as visited</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">Experimental</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </FormItem>
             )}
