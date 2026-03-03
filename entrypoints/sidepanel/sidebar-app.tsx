@@ -971,7 +971,7 @@ function SidebarApp() {
             <span>Buy Me a Coffee</span>
           </a>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            RedditGrab v1.0.8
+            RedditGrab v1.0.9
           </p>
           <div className="space-y-1 flex flex-col items-center">
             <a
