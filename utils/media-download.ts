@@ -82,10 +82,15 @@ export async function getGalleryImageUrls(mediaElement: Element) {
   liElements.forEach((li) => {
     // pick the <figure> img (better quality than background one)
     const img = li.querySelector<HTMLImageElement>("figure img");
+    if (!img) return;
+    const srcset =
+      img.getAttribute("srcset") ??
+      img.getAttribute("data-lazy-srcset") ??
+      null;
     const url =
-      img?.src ||
-      img?.getAttribute("data-lazy-src") ||
-      getBestUrlFromLazySrcset(img?.getAttribute("data-lazy-srcset") ?? null);
+      getBestUrlFromLazySrcset(srcset) ||
+      img.src ||
+      img.getAttribute("data-lazy-src");
     if (url) {
       urls.push(url);
     }
