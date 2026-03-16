@@ -240,11 +240,16 @@ export async function downloadVideo(options: DownloadVideoOptions) {
 
     const pattern = filenamePattern || "{subreddit}_{timestamp}_{filename}";
 
+    // Use extension from URL for direct links (e.g. .gif); default mp4 for HLS/processed
+    const pathname = new URL(url, "https://dummy").pathname;
+    const extMatch = pathname.match(/\.(gif|mp4|webm|mov)(\?|$)/i);
+    const extension = extMatch ? extMatch[1].toLowerCase() : "mp4";
+
     const filename = generateFilename(pattern, {
       subreddit: subredditName,
       timestamp: getCurrentTimestamp(),
       filename: extractFilenameFromUrl(url),
-      extension: "mp4",
+      extension,
     });
 
     // If text overlay is enabled and we have a title, process the video
@@ -608,7 +613,11 @@ export async function getVideoUrl(mediaElement: Element) {
 
   const packagedMedia = mediaElement.getAttribute("packaged-media-json");
   if (!packagedMedia) {
-    console.error("No packaged-media-json found.");
+    console.error("No packaged-media-json found, falling back to src.");
+    // Direct src (e.g. GIF or direct video from preview.redd.it – no packaged-media-json)
+    if (sourceUrl) {
+      return sourceUrl;
+    }
     return;
   }
 
