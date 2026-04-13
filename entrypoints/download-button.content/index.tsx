@@ -167,6 +167,14 @@ export default defineContentScript({
             anchor: element,
             append: "last",
             onMount: (container) => {
+              const style = document.createElement('style');
+              style.textContent = `
+                button { margin-top: 0 !important; }
+                div { line-height: normal !important; }
+                body { height: auto !important; }
+              `;
+              container.append(style);
+
               const app = document.createElement("div");
               container.className = cn(
                 "ml-auto w-fit bg-transparent float-right",
