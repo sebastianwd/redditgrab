@@ -39,6 +39,11 @@ import { Icon } from "@iconify/react";
 import { logger } from "@/utils/logger";
 import { SettingsSchema, type SettingsFormData } from "@/types/settings-schema";
 import { FAQ } from "@/components/faq";
+import {
+  MassDownloadMediaFilter,
+  mediaTypeMatchesMassDownloadFilter,
+  type MassDownloadMediaFilterValue,
+} from "@/components/mass-download-media-filter";
 import { processFolderDestination } from "@/utils/post-utils";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
@@ -109,6 +114,8 @@ function SidebarApp() {
   const [isRedditPage, setIsRedditPage] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [massDownloadScrollUp, setMassDownloadScrollUp] = useState(false);
+  const [massDownloadMediaFilter, setMassDownloadMediaFilter] =
+    useState<MassDownloadMediaFilterValue>("all");
 
   // Load values from storage into form
   useEffect(() => {
@@ -331,15 +338,44 @@ function SidebarApp() {
         }
 
         const { mediaUrls } = response.data;
-        logger.log(`Starting downloads for ${mediaUrls.length} media items`);
+
+        const filteredMediaUrls = mediaUrls.filter((item) =>
+          mediaTypeMatchesMassDownloadFilter(
+            item.type,
+            massDownloadMediaFilter,
+          ),
+        );
+
+        const skippedByFilter = mediaUrls.filter(
+          (item) =>
+            !mediaTypeMatchesMassDownloadFilter(
+              item.type,
+              massDownloadMediaFilter,
+            ),
+        );
+        if (skippedByFilter.length > 0) {
+          const currentProcessedIds = await processedPostIds.getValue();
+          const merged = new Set([
+            ...currentProcessedIds,
+            ...skippedByFilter.map((item) => item.mediaPostId),
+          ]);
+          await processedPostIds.setValue([...merged]);
+          logger.log(
+            `Skipped ${skippedByFilter.length} post(s) (media type filter: ${massDownloadMediaFilter})`,
+          );
+        }
+
+        logger.log(
+          `Starting downloads for ${filteredMediaUrls.length} of ${mediaUrls.length} media item(s)`,
+        );
 
         // Update progress tracking
-        setCurrentBatchCount(mediaUrls.length);
-        addToTotalPostsFound(mediaUrls.length);
+        setCurrentBatchCount(filteredMediaUrls.length);
+        addToTotalPostsFound(filteredMediaUrls.length);
 
         // Process downloads similar to download-button.tsx
-        for (let i = 0; i < mediaUrls.length; i++) {
-          const mediaItem = mediaUrls[i];
+        for (let i = 0; i < filteredMediaUrls.length; i++) {
+          const mediaItem = filteredMediaUrls[i];
 
           if (!shouldContinueProcessingRef.current) {
             logger.log("Processing stopped by user");
@@ -359,7 +395,7 @@ function SidebarApp() {
             );
 
             logger.log(
-              `Downloading ${i + 1}/${mediaUrls.length}: ${
+              `Downloading ${i + 1}/${filteredMediaUrls.length}: ${
                 mediaItem.type
               } with ${mediaItem.urls.length} URLs`,
             );
@@ -431,7 +467,7 @@ function SidebarApp() {
             }
 
             // Small delay between downloads to avoid overwhelming the system
-            if (i < mediaUrls.length - 1) {
+            if (i < filteredMediaUrls.length - 1) {
               await new Promise((resolve) => setTimeout(resolve, 1000));
             }
           } catch (error) {
@@ -440,7 +476,9 @@ function SidebarApp() {
         }
 
         const newPostsFound = mediaUrls.length > 0;
-        logger.log(`Batch complete! Downloaded ${mediaUrls.length} new posts.`);
+        logger.log(
+          `Batch complete! Processed ${mediaUrls.length} new post(s); attempted download for ${filteredMediaUrls.length}.`,
+        );
         setCurrentPostInfo(null);
 
         // Continue processing if scraping is still active
@@ -854,21 +892,32 @@ function SidebarApp() {
             Stop Scraping
           </Button>
         )}
+        <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+          {scrapingStatus.isScraping
+            ? "Auto-scrolling and downloading media posts..."
+            : "This will scroll and download all media on the page"}
+        </p>
         {!scrapingStatus.isScraping && (
-          <div className="flex flex-row items-center space-x-2 pl-1">
-            <Checkbox
-              id="mass-download-scroll-up"
-              checked={massDownloadScrollUp}
-              onCheckedChange={(checked) =>
-                setMassDownloadScrollUp(checked === true)
-              }
+          <div className="space-y-3 pl-1">
+            <div className="flex flex-row items-center space-x-2">
+              <Checkbox
+                id="mass-download-scroll-up"
+                checked={massDownloadScrollUp}
+                onCheckedChange={(checked) =>
+                  setMassDownloadScrollUp(checked === true)
+                }
+              />
+              <label
+                htmlFor="mass-download-scroll-up"
+                className="text-xs text-gray-500 dark:text-gray-400 leading-none cursor-pointer select-none"
+              >
+                Scroll up from current post
+              </label>
+            </div>
+            <MassDownloadMediaFilter
+              value={massDownloadMediaFilter}
+              onValueChange={setMassDownloadMediaFilter}
             />
-            <label
-              htmlFor="mass-download-scroll-up"
-              className="text-xs text-gray-500 dark:text-gray-400 leading-none cursor-pointer select-none"
-            >
-              Scroll up from current post
-            </label>
           </div>
         )}
 
@@ -922,15 +971,8 @@ function SidebarApp() {
         )}
       </div>
 
-      {/* Status Info */}
-      <div className="mt-6 text-center">
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-          {scrapingStatus.isScraping
-            ? "Auto-scrolling and downloading media posts..."
-            : "This will scroll and download all media on the page"}
-        </p>
-
-        {!scrapingStatus.isScraping && (
+      {!scrapingStatus.isScraping && (
+        <div className="mt-3 text-center">
           <Button
             onClick={handleClearProcessedPosts}
             variant="link"
@@ -950,8 +992,8 @@ function SidebarApp() {
               "Clear processed posts history"
             )}
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
       <FAQ />
 
@@ -971,7 +1013,7 @@ function SidebarApp() {
             <span>Buy Me a Coffee</span>
           </a>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            RedditGrab v1.0.11
+            RedditGrab v1.0.12
           </p>
           <div className="space-y-1 flex flex-col items-center">
             <a
