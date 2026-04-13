@@ -78,10 +78,21 @@ export function FAQ() {
             </div>
           </AccordionTrigger>
           <AccordionContent>
-            <p className="text-xs text-gray-600 dark:text-gray-400">
-              Files are saved to your default Downloads folder, organized by the
-              folder pattern you set above.
-            </p>
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Files are saved to your default Downloads folder, organized by the
+                folder pattern you set above.
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  Tip:
+                </span>{" "}
+                Browsers usually keep saves under your default Downloads folder.
+                For another drive or NAS, point Downloads at that location in your
+                browser or OS, or put a symlink inside Downloads that targets the
+                folder you want.
+              </p>
+            </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
