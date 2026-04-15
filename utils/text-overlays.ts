@@ -227,5 +227,7 @@ export async function addTextToVideo(
   } catch (error) {
     console.error("FFmpeg video processing failed:", error);
     throw error;
+  } finally {
+    ffmpeg.terminate();
   }
 }
