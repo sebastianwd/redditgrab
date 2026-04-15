@@ -311,10 +311,11 @@ export async function downloadVideo(options: DownloadVideoOptions) {
 }
 
 export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
-  try {
-    logger.log("Processing RedGIFs HLS with manual segment download:", m3u8Url);
+  logger.log("Processing RedGIFs HLS with manual segment download:", m3u8Url);
 
-    const ffmpeg = await createFFmpeg();
+  const ffmpeg = await createFFmpeg();
+
+  try {
 
     // Download and parse the m3u8 playlist
     const response = await fetch(m3u8Url);
@@ -396,6 +397,8 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
   } catch (error) {
     logger.error("Error processing RedGIFs HLS:", error);
     throw error;
+  } finally {
+    ffmpeg.terminate();
   }
 }
 
@@ -492,39 +495,42 @@ async function fetchMediaWithFallback(
 export async function getHLSVideoUrl(m3u8Url: string) {
   const ffmpeg = await createFFmpeg();
 
-  const [videoUrl, audioUrl] = m3u8Url.split(",");
+  try {
+    const [videoUrl, audioUrl] = m3u8Url.split(",");
 
-  logger.log("videoUrl", videoUrl);
-  logger.log("audioUrl", audioUrl);
+    logger.log("videoUrl", videoUrl);
+    logger.log("audioUrl", audioUrl);
 
-  const videoFile = await fetchMediaWithFallback(videoUrl, ".ts");
-  await ffmpeg.writeFile("video.ts", videoFile);
+    const videoFile = await fetchMediaWithFallback(videoUrl, ".ts");
+    await ffmpeg.writeFile("video.ts", videoFile);
 
-  const hasAudio = audioUrl && audioUrl.trim() !== "";
+    const hasAudio = audioUrl && audioUrl.trim() !== "";
 
-  if (hasAudio) {
-    const audioFile = await fetchMediaWithFallback(audioUrl, ".aac");
-    await ffmpeg.writeFile("audio.ts", audioFile);
+    if (hasAudio) {
+      const audioFile = await fetchMediaWithFallback(audioUrl, ".aac");
+      await ffmpeg.writeFile("audio.ts", audioFile);
 
-    await ffmpeg.exec([
-      "-i",
-      "video.ts",
-      "-i",
-      "audio.ts",
-      "-c",
-      "copy",
-      "output.mp4",
-    ]);
-  } else {
-    logger.log("No audio URL provided, processing video only");
-    await ffmpeg.exec(["-i", "video.ts", "-c", "copy", "output.mp4"]);
+      await ffmpeg.exec([
+        "-i",
+        "video.ts",
+        "-i",
+        "audio.ts",
+        "-c",
+        "copy",
+        "output.mp4",
+      ]);
+    } else {
+      logger.log("No audio URL provided, processing video only");
+      await ffmpeg.exec(["-i", "video.ts", "-c", "copy", "output.mp4"]);
+    }
+
+    const videoData = await ffmpeg.readFile("output.mp4");
+    const buffer = new Uint8Array(videoData as unknown as ArrayBuffer);
+    const blob = new Blob([buffer], { type: "video/mp4" });
+    return await createBlobUrl(blob);
+  } finally {
+    ffmpeg.terminate();
   }
-
-  const videoData = await ffmpeg.readFile("output.mp4");
-  const buffer = new Uint8Array(videoData as unknown as ArrayBuffer);
-  const blob = new Blob([buffer], { type: "video/mp4" });
-  const objectUrl = await createBlobUrl(blob);
-  return objectUrl;
 }
 
 type RedditPackagedMedia = {
