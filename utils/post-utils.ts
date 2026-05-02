@@ -4,6 +4,7 @@
 
 import { format, parseISO, isValid } from "date-fns";
 import { getSubredditNameFromContainer } from "./scraping-utils";
+import { sanitizeForFilename } from "./filename-utils";
 
 /**
  * Extract the post title from a Reddit post element
@@ -88,7 +89,8 @@ export const processFolderDestination = (
   postElement: Element | null,
   subredditName?: string,
   postDate?: string,
-  postAuthor?: string
+  postAuthor?: string,
+  postTitle?: string
 ): string => {
   let finalDestination = folderDestination || "Reddit Downloads";
 
@@ -114,6 +116,14 @@ export const processFolderDestination = (
     const author =
       postAuthor || (postElement ? getPostAuthor(postElement) : "unknown-user");
     finalDestination = finalDestination.replace(/{user}/g, author);
+  }
+
+  // Replace {title} variable
+  if (finalDestination.includes("{title}")) {
+    const rawTitle =
+      postTitle || (postElement ? getPostTitle(postElement) : "");
+    const safeTitle = sanitizeForFilename(rawTitle) || "untitled";
+    finalDestination = finalDestination.replace(/{title}/g, safeTitle);
   }
 
   return finalDestination;

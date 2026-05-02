@@ -45,8 +45,8 @@ https://github.com/user-attachments/assets/4295d7c0-3b2f-450c-9ec5-53dab86b150d
 
 ### Settings
 
-- **Download Folder**: Where files are saved (supports `{subreddit}` variable)
-- **Filename Pattern**: File naming (supports `{subreddit}`, `{timestamp}`, `{filename}`)
+- **Download Folder**: Where files are saved (supports `{subreddit}`, `{date}`, `{user}`, `{title}`)
+- **Filename Pattern**: File naming (supports `{subreddit}`, `{timestamp}`, `{title}`, `{filename}`)
 - **Gallery Folders**: Separate folders for image galleries
 - **Title Overlay**: Add post titles to media
 
