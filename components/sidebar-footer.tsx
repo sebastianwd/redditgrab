@@ -1,6 +1,8 @@
 import { Icon } from "@iconify/react";
 
 export function SidebarFooter() {
+  const version = browser.runtime.getManifest().version;
+
   return (
     <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
       <div className="text-center space-y-3">
@@ -17,7 +19,7 @@ export function SidebarFooter() {
           <span>Buy Me a Coffee</span>
         </a>
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          RedditGrab v1.0.14
+          RedditGrab v{version}
         </p>
         <div className="space-y-1 flex flex-col items-center">
           <a
