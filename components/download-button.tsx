@@ -46,14 +46,17 @@ const DownloadButton = ({
       const subredditName = getSubredditNameFromContainer(
         postElement || mediaContainer,
       );
+      // Get post title if needed
+      const postTitle = postElement ? getPostTitle(postElement) : undefined;
+
       const finalFolderDestination = processFolderDestination(
         latestFolderConfig,
         postElement,
         subredditName,
+        undefined,
+        undefined,
+        postTitle,
       );
-
-      // Get post title if needed
-      const postTitle = postElement ? getPostTitle(postElement) : undefined;
 
       // Send message to background script to handle the download
       const downloadResponse = await sendMessage(

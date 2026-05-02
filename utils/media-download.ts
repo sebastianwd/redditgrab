@@ -179,6 +179,7 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
         timestamp: getCurrentTimestamp(),
         filename: extractFilenameFromUrl(url),
         extension,
+        title: postTitle,
       });
 
       // For galleries with folders, add index to filename to avoid conflicts
@@ -250,6 +251,7 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       timestamp: getCurrentTimestamp(),
       filename: extractFilenameFromUrl(url),
       extension,
+      title: postTitle,
     });
 
     // If text overlay is enabled and we have a title, process the video

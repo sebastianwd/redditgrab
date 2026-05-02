@@ -393,6 +393,7 @@ function SidebarApp() {
               mediaItem.subredditName,
               mediaItem.postDate,
               mediaItem.postAuthor,
+              mediaItem.postTitle,
             );
 
             logger.log(
@@ -684,7 +685,7 @@ function SidebarApp() {
                   />
                 </FormControl>
                 <FormDescription>
-                  Available: {"{subreddit}"}, {"{date}"},
+                  Available: {"{subreddit}"}, {"{date}"}, {"{title}"},
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -721,7 +722,8 @@ function SidebarApp() {
                   />
                 </FormControl>
                 <FormDescription>
-                  Available: {"{subreddit}"}, {"{timestamp}"}, {"{filename}"}
+                  Available: {"{subreddit}"}, {"{timestamp}"}, {"{title}"},{" "}
+                  {"{filename}"}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
