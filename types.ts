@@ -26,6 +26,7 @@ export type DownloadImageOptions = {
 export interface BaseMessage {
   target: string;
   type: string;
+  downloadId?: string;
 }
 
 // Offscreen message types
