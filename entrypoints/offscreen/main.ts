@@ -8,10 +8,12 @@ browser.runtime.onMessage.addListener((message: any) => {
   handleMessages(message);
 });
 
-function handleMessages(message: OffscreenMessage) {
+function handleMessages(message: OffscreenMessage & { downloadId?: string }) {
   if (message?.target !== MESSAGE_TARGET.OFFSCREEN || !message?.type) {
     return;
   }
+
+  const { downloadId } = message;
 
   switch (message.type) {
     case OFFSCREEN_KEYS.DOWNLOAD_VIDEO:
@@ -19,7 +21,7 @@ function handleMessages(message: OffscreenMessage) {
         ...message.data,
         offscreen: true,
       }).then((result) => {
-        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_VIDEO, result);
+        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_VIDEO, result, downloadId);
       });
 
       break;
@@ -28,7 +30,7 @@ function handleMessages(message: OffscreenMessage) {
         ...message.data,
         offscreen: true,
       }).then((result) => {
-        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_IMAGE, result);
+        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_IMAGE, result, downloadId);
       });
       break;
     default:
@@ -39,10 +41,11 @@ function handleMessages(message: OffscreenMessage) {
   }
 }
 
-function sendToBackground(type: string, data: any) {
+function sendToBackground(type: string, data: any, downloadId?: string) {
   chrome.runtime.sendMessage({
     type,
     target: MESSAGE_TARGET.BACKGROUND,
     data,
+    downloadId,
   });
 }

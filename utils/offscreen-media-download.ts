@@ -7,6 +7,11 @@ import { OFFSCREEN_DOCUMENT_PATH } from "@/utils/constants";
 
 declare const self: ServiceWorkerGlobalScope;
 
+const pendingDownloads = new Map<
+  string,
+  { resolve: () => void; reject: (err: any) => void }
+>();
+
 async function hasOffscreenDocument() {
   const contexts = await browser.runtime?.getContexts({
     contextTypes: [browser.runtime.ContextType.OFFSCREEN_DOCUMENT],
@@ -43,11 +48,19 @@ export const offscreenDownloadVideo = async (
   }
   await createOffscreenDocument();
 
+  const downloadId = crypto.randomUUID();
+  const downloadComplete = new Promise<void>((resolve, reject) => {
+    pendingDownloads.set(downloadId, { resolve, reject });
+  });
+
   await browser.runtime.sendMessage({
     type: OFFSCREEN_KEYS.DOWNLOAD_VIDEO,
     target: MESSAGE_TARGET.OFFSCREEN,
     data: options,
+    downloadId,
   });
+
+  await downloadComplete;
 };
 
 export const offscreenDownloadGalleryImages = async (
@@ -59,11 +72,19 @@ export const offscreenDownloadGalleryImages = async (
 
   await createOffscreenDocument();
 
+  const downloadId = crypto.randomUUID();
+  const downloadComplete = new Promise<void>((resolve, reject) => {
+    pendingDownloads.set(downloadId, { resolve, reject });
+  });
+
   await browser.runtime.sendMessage({
     type: OFFSCREEN_KEYS.DOWNLOAD_IMAGE,
     target: MESSAGE_TARGET.OFFSCREEN,
     data: options,
+    downloadId,
   });
+
+  await downloadComplete;
 };
 
 export async function handleOffscreenMessages(message: any) {
@@ -71,28 +92,45 @@ export async function handleOffscreenMessages(message: any) {
     return;
   }
 
-  switch (message.type) {
-    case OFFSCREEN_KEYS.DOWNLOAD_VIDEO:
-      await browser.downloads.download({
-        url: message.data.url,
-        filename: message.data.filename,
-        saveAs: false,
-      });
-      break;
-    case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
-      await Promise.all(
-        message.data.map((item) =>
-          browser.downloads.download({
-            url: item.url,
-            filename: item.filename,
-            saveAs: false,
-          })
-        )
-      );
-      break;
-    default:
-      console.warn(
-        `Unexpected message received: '${JSON.stringify(message)}'.`
-      );
+  const { downloadId } = message;
+
+  try {
+    switch (message.type) {
+      case OFFSCREEN_KEYS.DOWNLOAD_VIDEO:
+        await browser.downloads.download({
+          url: message.data.url,
+          filename: message.data.filename,
+          saveAs: false,
+        });
+        break;
+      case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
+        await Promise.all(
+          message.data.map((item: { url: string; filename: string }) =>
+            browser.downloads.download({
+              url: item.url,
+              filename: item.filename,
+              saveAs: false,
+            })
+          )
+        );
+        break;
+      default:
+        console.warn(
+          `Unexpected message received: '${JSON.stringify(message)}'.`
+        );
+        return;
+    }
+
+    if (downloadId) {
+      pendingDownloads.get(downloadId)?.resolve();
+      pendingDownloads.delete(downloadId);
+    }
+  } catch (error) {
+    if (downloadId) {
+      pendingDownloads.get(downloadId)?.reject(error);
+      pendingDownloads.delete(downloadId);
+    } else {
+      throw error;
+    }
   }
 }

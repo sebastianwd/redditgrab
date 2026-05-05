@@ -759,8 +759,23 @@ function SidebarApp() {
                     onCheckedChange={field.onChange}
                   />
                 </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel>Add post title to images</FormLabel>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Embed post title on images</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Overlays the post title as a text caption onto the
+                          downloaded image
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </FormItem>
             )}
@@ -777,10 +792,23 @@ function SidebarApp() {
                     onCheckedChange={field.onChange}
                   />
                 </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel>
-                    Add post title to videos (slower processing)
-                  </FormLabel>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Embed post title on videos</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Overlays the post title as a text caption onto the
+                          downloaded video. Downloads will be slower.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </FormItem>
             )}
