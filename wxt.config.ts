@@ -24,6 +24,17 @@ export default defineConfig({
       "*://*.redgifs.com/*",
       "*://api.redgifs.com/*",
     ],
+    // Explicit Gecko ID avoids Firefox reporting a signed XPI as corrupt when
+    // Guid from AMO API: https://addons.mozilla.org/api/v5/addons/addon/media-downloader-redditgrab/
+    ...(browser === "firefox"
+      ? {
+          browser_specific_settings: {
+            gecko: {
+              id: "{d6ae963b-906b-4ebe-9d91-ef1cb6f770c9}",
+            },
+          },
+        }
+      : {}),
     content_security_policy: {
       extension_pages:
         "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';",
