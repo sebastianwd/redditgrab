@@ -550,7 +550,7 @@ type RedditPackagedMedia = {
   };
 };
 
-const getHighestQualityHLS = async (m3u8Url: string) => {
+export const getHighestQualityHLS = async (m3u8Url: string) => {
   const playlist = await fetch(m3u8Url).then((r) => r.text());
 
   const lines = playlist.split("\n");

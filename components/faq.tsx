@@ -95,6 +95,77 @@ export function FAQ() {
             </div>
           </AccordionContent>
         </AccordionItem>
+
+        <AccordionItem value="item-4">
+          <AccordionTrigger className="text-xs font-medium text-gray-800 dark:text-gray-200 hover:no-underline">
+            <div className="flex items-center space-x-2">
+              <Icon
+                icon="lucide:badge-check"
+                className="w-4 h-4 text-green-600 flex-shrink-0"
+              />
+              <span>What do the green check and blue border mean?</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent>
+            <div className="space-y-3">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                The{" "}
+                <span className="font-medium text-green-600 dark:text-green-400">
+                  green corner check
+                </span>{" "}
+                marks posts you've already downloaded, on both feeds and search
+                results. It's off by default, turn on{" "}
+                <span className="font-medium text-gray-800 dark:text-gray-200">
+                  Show downloaded markers
+                </span>{" "}
+                in the settings above to enable it.
+              </p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                During a mass download the{" "}
+                <span className="font-medium text-blue-600 dark:text-blue-400">
+                  blue border
+                </span>{" "}
+                shows which post is being grabbed right now as the page
+                auto-scrolls.
+              </p>
+
+              <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                <div className="text-center">
+                  <img
+                    src="/search-feature.png"
+                    alt="Green downloaded check and blue downloading border on Reddit search results"
+                    className="w-full max-w-sm mx-auto rounded-lg shadow-sm border border-gray-300 dark:border-gray-600"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </AccordionContent>
+        </AccordionItem>
+
+        <AccordionItem value="item-5">
+          <AccordionTrigger className="text-xs font-medium text-gray-800 dark:text-gray-200 hover:no-underline">
+            <div className="flex items-center space-x-2">
+              <Icon
+                icon="lucide:search"
+                className="w-4 h-4 text-orange-500 flex-shrink-0"
+              />
+              <span>Can I download from search results?</span>
+            </div>
+          </AccordionTrigger>
+          <AccordionContent>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              Yes. Open a Reddit search, go to the{" "}
+              <span className="font-medium text-gray-800 dark:text-gray-200">
+                Posts
+              </span>{" "}
+              tab, and hit Start Mass Download. It grabs images, galleries,
+              videos, and RedGifs from the results at full resolution.
+            </p>
+          </AccordionContent>
+        </AccordionItem>
       </Accordion>
     </div>
   );

@@ -9,6 +9,7 @@ import {
   addTitleToImages as addTitleToImagesStorage,
   addTitleToVideos as addTitleToVideosStorage,
   markDownloadedAsVisited as markDownloadedAsVisitedStorage,
+  showDownloadedMarkers as showDownloadedMarkersStorage,
   useDateRange as useDateRangeStorage,
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
@@ -39,6 +40,7 @@ import { Icon } from "@iconify/react";
 import { logger } from "@/utils/logger";
 import { SettingsSchema, type SettingsFormData } from "@/types/settings-schema";
 import { FAQ } from "@/components/faq";
+import { Changelog } from "@/components/changelog";
 import { SidebarFooter } from "@/components/sidebar-footer";
 import {
   MassDownloadMediaFilter,
@@ -74,6 +76,10 @@ const debouncedSaveMarkDownloadedAsVisited = debounce(
   500,
 );
 
+const debouncedSaveShowDownloadedMarkers = debounce(async (value: boolean) => {
+  await showDownloadedMarkersStorage.setValue(value);
+}, 500);
+
 const debouncedSaveUseDateRange = debounce(async (value: boolean) => {
   await useDateRangeStorage.setValue(value);
 }, 500);
@@ -104,6 +110,7 @@ function SidebarApp() {
       addTitleToImages: false,
       addTitleToVideos: false,
       markDownloadedAsVisited: false,
+      showDownloadedMarkers: false,
       useDateRange: false,
       dateRangeStart: undefined,
       dateRangeEnd: undefined,
@@ -128,6 +135,7 @@ function SidebarApp() {
         addTitleToImages,
         addTitleToVideos,
         markDownloadedAsVisited,
+        showDownloadedMarkers,
         useDateRange,
         dateRangeStart,
         dateRangeEnd,
@@ -139,6 +147,7 @@ function SidebarApp() {
         addTitleToImagesStorage.getValue(),
         addTitleToVideosStorage.getValue(),
         markDownloadedAsVisitedStorage.getValue(),
+        showDownloadedMarkersStorage.getValue(),
         useDateRangeStorage.getValue(),
         dateRangeStartStorage.getValue(),
         dateRangeEndStorage.getValue(),
@@ -157,6 +166,7 @@ function SidebarApp() {
         addTitleToImages: addTitleToImages || false,
         addTitleToVideos: addTitleToVideos || false,
         markDownloadedAsVisited: markDownloadedAsVisited || false,
+        showDownloadedMarkers: showDownloadedMarkers || false,
         useDateRange: useDateRange || false,
         dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
         dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
@@ -193,6 +203,11 @@ function SidebarApp() {
           case "markDownloadedAsVisited":
             debouncedSaveMarkDownloadedAsVisited(
               value.markDownloadedAsVisited || false,
+            );
+            break;
+          case "showDownloadedMarkers":
+            debouncedSaveShowDownloadedMarkers(
+              value.showDownloadedMarkers || false,
             );
             break;
           case "useDateRange":
@@ -846,6 +861,39 @@ function SidebarApp() {
 
           <FormField
             control={form.control}
+            name="showDownloadedMarkers"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Show downloaded markers on posts</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Adds a green corner check to posts you've already
+                          downloaded, on feeds and search results
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
             name="useDateRange"
             render={({ field }) => (
               <FormItem className="flex flex-row items-start space-x-3 space-y-0">
@@ -1027,6 +1075,8 @@ function SidebarApp() {
       )}
 
       <FAQ />
+
+      <Changelog />
 
       <SidebarFooter />
     </div>

@@ -9,6 +9,7 @@ import {
   useDateRange,
   dateRangeStart,
   dateRangeEnd,
+  showDownloadedMarkers,
 } from "@/utils/storage";
 import { compact } from "es-toolkit";
 import { logger } from "@/utils/logger";
@@ -21,6 +22,13 @@ import {
   getPostDate,
   getPostDatetime,
 } from "@/utils/post-utils";
+import {
+  isSearchResultsPage,
+  getSearchResultRoots,
+  getSearchThingId,
+  findSearchRowByThingId,
+  extractSearchResultMedia,
+} from "@/utils/search-scraping";
 
 const scrollToLoadMore = (scrollUp: boolean) => {
   if (scrollUp) {
@@ -93,6 +101,270 @@ const isPostInDateRange = (
     logger.error("Error checking post date range:", error);
     return true; // If there's an error, include the post
   }
+};
+
+// ── Search-result download highlight ─────────────────────────────────────────
+// Overlay border that scrolls with the row (approach from civitai-dl). Styled
+// via the CSSOM + Web Animations API rather than an injected <style>, because
+// Reddit's CSP blocks injected stylesheets (which left the overlay invisible).
+// Each highlight persists until the next one starts; a long timeout cleans up
+// the final one.
+const RG_HIGHLIGHT_TIMEOUT_MS = 20000;
+
+const clearHighlights = () => {
+  document
+    .querySelectorAll("[data-rg-dl-highlight]")
+    .forEach((el) => el.remove());
+};
+
+/** Prefer a clipped, rounded ancestor so the border hugs the visible tile. */
+const getHighlightTarget = (card: HTMLElement): HTMLElement => {
+  let el: HTMLElement | null = card;
+  while (el && el !== document.body) {
+    const { overflow, overflowX, overflowY, borderRadius } =
+      getComputedStyle(el);
+    const clipped = [overflow, overflowX, overflowY].some(
+      (value) => value === "hidden" || value === "clip",
+    );
+    if (clipped && borderRadius !== "0px") return el;
+    el = el.parentElement;
+  }
+  return card;
+};
+
+/**
+ * Resolve an element that forms a real positioning box. Reddit's search rows are
+ * `search-telemetry-tracker` custom elements with `display:inline` (or
+ * `contents`), where `position:relative` has no useful box, so an absolute child
+ * (`right:0`) lands on the wrong side. Fall through to the first block-level child.
+ */
+const resolveBoxElement = (el: HTMLElement): HTMLElement => {
+  const display = getComputedStyle(el).display;
+  if (display === "inline" || display === "contents") {
+    const child = el.firstElementChild as HTMLElement | null;
+    if (child) return child;
+  }
+  return el;
+};
+
+/** Overlay inside the card so it scrolls with the page (no per-frame sync). */
+const highlightCard = (card: HTMLElement) => {
+  clearHighlights();
+
+  const target = resolveBoxElement(getHighlightTarget(card));
+  if (getComputedStyle(target).position === "static") {
+    target.style.position = "relative";
+  }
+
+  const overlay = document.createElement("div");
+  overlay.dataset.rgDlHighlight = "";
+  // Explicit offsets (not the `inset` shorthand) so the overlay reliably fills
+  // the row in Firefox, where `inset:0` via cssText didn't apply (rendered as a
+  // small box in the corner).
+  overlay.style.cssText = [
+    "position:absolute",
+    "top:0",
+    "left:0",
+    "right:0",
+    "bottom:0",
+    "pointer-events:none",
+    "z-index:9998",
+    "box-sizing:border-box",
+    "border:3px solid #3b82f6",
+    "border-radius:8px",
+  ].join(";");
+  target.appendChild(overlay);
+
+  const animation = overlay.animate(
+    [
+      {
+        boxShadow:
+          "0 0 0 2px rgba(59,130,246,0.45), 0 0 22px rgba(59,130,246,0.45)",
+        borderColor: "#3b82f6",
+      },
+      {
+        boxShadow:
+          "0 0 0 3px rgba(96,165,250,0.55), 0 0 34px rgba(96,165,250,0.70)",
+        borderColor: "#60a5fa",
+      },
+      {
+        boxShadow:
+          "0 0 0 2px rgba(59,130,246,0.45), 0 0 22px rgba(59,130,246,0.45)",
+        borderColor: "#3b82f6",
+      },
+    ],
+    { duration: 1400, iterations: Infinity, easing: "ease-in-out" },
+  );
+
+  window.setTimeout(() => {
+    animation.cancel();
+    overlay.remove();
+  }, RG_HIGHLIGHT_TIMEOUT_MS);
+};
+
+// ── "Downloaded" corner marker (green triangle + check), shown on posts/rows
+//    whose id is in processedPostIds. Styled via CSSOM (CSP-safe). ─────────────
+const RG_DOWNLOADED_ATTR = "data-rg-downloaded";
+
+const addDownloadedBadge = (el: HTMLElement) => {
+  if (el.querySelector(`:scope > [${RG_DOWNLOADED_ATTR}]`)) return;
+  if (getComputedStyle(el).position === "static") {
+    el.style.position = "relative";
+  }
+  const wrap = document.createElement("div");
+  wrap.setAttribute(RG_DOWNLOADED_ATTR, "");
+  wrap.title = "Downloaded with RedditGrab";
+  wrap.style.cssText = [
+    "position:absolute",
+    "top:0",
+    "right:0",
+    "width:24px",
+    "height:24px",
+    "z-index:9997",
+    "pointer-events:none",
+  ].join(";");
+
+  const triangle = document.createElement("div");
+  triangle.style.cssText = [
+    "position:absolute",
+    "top:0",
+    "right:0",
+    "width:0",
+    "height:0",
+    "border-style:solid",
+    "border-width:0 24px 24px 0",
+    "border-color:transparent #16a34a transparent transparent",
+    "filter:drop-shadow(0 1px 1px rgba(0,0,0,0.35))",
+  ].join(";");
+
+  const check = document.createElement("span");
+  check.textContent = "✓";
+  check.style.cssText = [
+    "position:absolute",
+    "top:1px",
+    "right:2px",
+    "color:#fff",
+    "font-size:12px",
+    "font-weight:700",
+    "line-height:14px",
+  ].join(";");
+
+  wrap.appendChild(triangle);
+  wrap.appendChild(check);
+  el.appendChild(wrap);
+};
+
+const removeDownloadedBadge = (el: HTMLElement) => {
+  el.querySelector(`:scope > [${RG_DOWNLOADED_ATTR}]`)?.remove();
+};
+
+/** Add/remove the downloaded marker on every visible post/row to match storage. */
+const refreshDownloadedMarkers = async () => {
+  // Off by default; when disabled, strip any badges and bail.
+  if (!(await showDownloadedMarkers.getValue())) {
+    document
+      .querySelectorAll(`[${RG_DOWNLOADED_ATTR}]`)
+      .forEach((b) => b.remove());
+    return;
+  }
+
+  const ids = new Set(await processedPostIds.getValue());
+  const onSearch = isSearchResultsPage();
+  const targets = onSearch
+    ? getSearchResultRoots()
+    : Array.from(document.querySelectorAll("shreddit-post"));
+
+  for (const el of targets) {
+    const target = el as HTMLElement;
+    const id = onSearch ? getSearchThingId(target) : getPostIdentifier(target);
+    const box = resolveBoxElement(target);
+    const hasBadge = !!box.querySelector(`:scope > [${RG_DOWNLOADED_ATTR}]`);
+    if (id && ids.has(id)) {
+      if (!hasBadge) addDownloadedBadge(box);
+    } else if (hasBadge) {
+      removeDownloadedBadge(box);
+    }
+  }
+};
+
+// Thing-ids that resolved to no downloadable media (external hosts, text posts,
+// failed fetches). Session-only, cleared on page reload. Prevents the mass
+// downloader from re-fetching the same dead posts every scan cycle (which would
+// pile up requests and invite rate limiting). Kept separate from
+// processedPostIds so these never get a "downloaded" marker.
+const unsupportedThingIds = new Set<string>();
+
+const scanSearchPageMedia = async () => {
+  const roots = getSearchResultRoots();
+
+  const processedIds = await processedPostIds.getValue();
+  const processedSet = new Set(processedIds);
+
+  const useDateRangeFilter = await useDateRange.getValue();
+  const startDate = useDateRangeFilter
+    ? await dateRangeStart.getValue()
+    : undefined;
+  const endDate = useDateRangeFilter
+    ? await dateRangeEnd.getValue()
+    : undefined;
+
+  let mediaCount = 0;
+
+  const mediaUrls = compact(
+    await Promise.all(
+      roots.map(async (root) => {
+        // Cheap, fetch-free checks first so we never re-fetch JSON/HLS for posts
+        // already downloaded or filtered out (re-fetching invites rate limiting).
+        const thingId = getSearchThingId(root);
+        if (!thingId) return null;
+
+        if (processedSet.has(thingId)) {
+          logger.log(`Skipping already processed post: ${thingId}`);
+          return null;
+        }
+
+        if (unsupportedThingIds.has(thingId)) {
+          logger.log(`Skipping unsupported post (cached): ${thingId}`);
+          return null;
+        }
+
+        if (!isPostInDateRange(root, startDate, endDate)) {
+          logger.log(`Skipping post outside date range: ${thingId}`);
+          return null;
+        }
+
+        const media = await extractSearchResultMedia(root);
+        if (!media) {
+          // No downloadable media this session: don't re-fetch it next cycle.
+          unsupportedThingIds.add(thingId);
+          return null;
+        }
+
+        // Tag the root so HIGHLIGHT_CURRENT_POST / MARK_POST_VISITED can find it.
+        root.setAttribute("data-wxt-media-id", media.mediaPostId);
+
+        mediaCount++;
+
+        return {
+          urls: media.urls,
+          type: media.type,
+          subredditName: media.subredditName,
+          mediaPostId: media.mediaPostId,
+          postTitle: media.postTitle,
+          postAuthor: media.postAuthor ?? getPostAuthor(root),
+          postDate: media.postDate ?? getPostDate(root),
+        };
+      }),
+    ),
+  );
+
+  return {
+    success: true,
+    data: {
+      totalPosts: mediaCount,
+      mediaUrls,
+    },
+  };
 };
 
 const findVideoPlayer = (element: Element) => {
@@ -203,6 +475,16 @@ export default defineContentScript({
     };
 
     await attachButtons();
+    await refreshDownloadedMarkers();
+
+    // Re-apply downloaded markers live as downloads complete (mass or single)
+    // and when the show/hide setting is toggled.
+    processedPostIds.watch(() => {
+      refreshDownloadedMarkers();
+    });
+    showDownloadedMarkers.watch(() => {
+      refreshDownloadedMarkers();
+    });
 
     let scrollTimeout: NodeJS.Timeout;
     const handleScroll = () => {
@@ -210,6 +492,7 @@ export default defineContentScript({
       scrollTimeout = setTimeout(async () => {
         logger.log("Scroll detected, reattaching buttons...");
         await attachButtons();
+        await refreshDownloadedMarkers();
       }, 150);
     };
 
@@ -259,6 +542,10 @@ export default defineContentScript({
     });
 
     onMessage("SCAN_PAGE_MEDIA", async ({ data }) => {
+      if (isSearchResultsPage()) {
+        return scanSearchPageMedia();
+      }
+
       const { scrollUp = false, anchorPostId } = data ?? {};
 
       let postsArray = Array.from(document.querySelectorAll("shreddit-post"));
@@ -357,6 +644,18 @@ export default defineContentScript({
 
     onMessage("HIGHLIGHT_CURRENT_POST", async ({ data }) => {
       const { mediaPostId, subredditName, mediaType } = data;
+
+      // Search result rows: the feed-style text indicator renders as broken
+      // vertical text. Use a pulsing overlay border + smooth center-scroll to the
+      // current row (scrollIntoView is correct for window-scrolled pages).
+      if (isSearchResultsPage()) {
+        const row = findSearchRowByThingId(mediaPostId);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "center" });
+          highlightCard(row);
+        }
+        return { success: true };
+      }
 
       const currentPost = document.querySelector(
         `[data-wxt-media-id="${mediaPostId}"]`,

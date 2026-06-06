@@ -2,7 +2,7 @@ import { MediaContentType } from "@/types";
 
 export const getDownloadUrlsFromContainer = async (
   mediaContainer: Element,
-  mediaContentType: MediaContentType
+  mediaContentType: MediaContentType,
 ) => {
   let urls: string[] = [];
 
@@ -36,7 +36,7 @@ export const getDownloadUrlsFromContainer = async (
 export function getSubredditNameFromContainer(container: Element): string {
   try {
     const subredditAnchor = container.querySelector(
-      'a[data-testid="subreddit-name"]'
+      'a[data-testid="subreddit-name"]',
     );
 
     logger.log("subredditAnchor", subredditAnchor);
@@ -56,7 +56,7 @@ export function getSubredditNameFromContainer(container: Element): string {
     }
 
     logger.warn(
-      "Could not determine subreddit name, falling back to 'unknown'"
+      "Could not determine subreddit name, falling back to 'unknown'",
     );
     return "unknown";
   } catch (error) {
