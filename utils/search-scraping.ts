@@ -14,15 +14,48 @@ import { logger } from "./logger";
 const RESULT_ROOT_SELECTOR =
   '[data-testid="search-sdui-post"], [data-testid="search-post-with-content-preview"]';
 
+// Media tab (`type=media`) is a thumbnail grid: each tile is an `<a>` linking to
+// the post and containing the media thumbnail. No `data-testid`/`data-thingid`,
+// so the post id comes from the `/comments/<id>/` href and full media resolves
+// via the post JSON (same path as thumbnail-only Posts-tab results).
+const MEDIA_TILE_SELECTOR = 'a[href*="/comments/"]';
+const COMMENTS_ID_RE = /\/comments\/([a-z0-9]+)/i;
+
 /** True when the current page is a Reddit search results page. */
 export const isSearchResultsPage = (): boolean => {
   if (window.location.pathname.includes("/search")) return true;
   return document.querySelector(RESULT_ROOT_SELECTOR) !== null;
 };
 
-/** All search result root elements currently in the DOM. */
+/** True when on the search Media tab (grid of media thumbnails). */
+const isMediaSearchTab = (): boolean => {
+  const type = new URLSearchParams(window.location.search).get("type");
+  if (type === "media") return true;
+  // Fallback: media tiles present and no Posts-tab roots.
+  if (document.querySelector(RESULT_ROOT_SELECTOR)) return false;
+  return document.querySelector(MEDIA_TILE_SELECTOR) !== null;
+};
+
+/** Media-tab grid tiles, one per post (the anchor that holds the thumbnail). */
+const getMediaTabRoots = (): Element[] => {
+  const seen = new Set<string>();
+  const roots: Element[] = [];
+  for (const anchor of document.querySelectorAll(MEDIA_TILE_SELECTOR)) {
+    // The post has two comments links (thumbnail + title); keep the media one.
+    if (!anchor.querySelector("img, faceplate-img")) continue;
+    const id = anchor.getAttribute("href")?.match(COMMENTS_ID_RE)?.[1];
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    roots.push(anchor);
+  }
+  return roots;
+};
+
+/** All search result root elements currently in the DOM (Posts or Media tab). */
 export const getSearchResultRoots = (): Element[] =>
-  Array.from(document.querySelectorAll(RESULT_ROOT_SELECTOR));
+  isMediaSearchTab()
+    ? getMediaTabRoots()
+    : Array.from(document.querySelectorAll(RESULT_ROOT_SELECTOR));
 
 /** Reddit thing id (e.g. "t3_1tww4q0") for a search result. */
 export const getSearchThingId = (root: Element): string | null => {
@@ -44,6 +77,13 @@ export const getSearchThingId = (root: Element): string | null => {
   const titleEl = root.querySelector('[id^="search-post-title-"]');
   const titleId = titleEl?.getAttribute("id");
   if (titleId) return titleId.replace("search-post-title-", "");
+
+  // Media-tab tile (or any result): derive from the post permalink.
+  const commentsHref = root.matches(MEDIA_TILE_SELECTOR)
+    ? root.getAttribute("href")
+    : root.querySelector(MEDIA_TILE_SELECTOR)?.getAttribute("href");
+  const commentsId = commentsHref?.match(COMMENTS_ID_RE)?.[1];
+  if (commentsId) return `t3_${commentsId}`;
 
   return null;
 };
