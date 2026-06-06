@@ -580,6 +580,20 @@ function SidebarApp() {
     await darkModeStorage.setValue(newDarkMode);
   };
 
+  // The Media search tab has no post dates in its grid, so date filtering can't
+  // apply there. Disable the control and explain why.
+  const isMediaSearchTab = (() => {
+    try {
+      const url = new URL(currentUrl);
+      return (
+        url.pathname.includes("/search") &&
+        url.searchParams.get("type") === "media"
+      );
+    } catch {
+      return false;
+    }
+  })();
+
   // Show different content if not on Reddit
   if (!isRedditPage) {
     return (
@@ -899,18 +913,45 @@ function SidebarApp() {
               <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                 <FormControl>
                   <Checkbox
-                    checked={field.value}
+                    checked={field.value && !isMediaSearchTab}
                     onCheckedChange={field.onChange}
+                    disabled={isMediaSearchTab}
                   />
                 </FormControl>
-                <div className="space-y-1 leading-none">
-                  <FormLabel>Filter posts by date range</FormLabel>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel
+                    className={
+                      isMediaSearchTab
+                        ? "text-gray-400 dark:text-gray-500"
+                        : undefined
+                    }
+                  >
+                    Filter posts by date range
+                  </FormLabel>
+                  {isMediaSearchTab && (
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                            <Icon icon="lucide:info" className="size-3.5" />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">
+                            The search Media tab doesn't show post dates, so date
+                            filtering isn't available here. Use the Posts tab to
+                            filter by date.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  )}
                 </div>
               </FormItem>
             )}
           />
 
-          {form.watch("useDateRange") && (
+          {form.watch("useDateRange") && !isMediaSearchTab && (
             <div className="space-y-3 ml-6 border-l-2 border-gray-200 pl-4">
               <FormField
                 control={form.control}
