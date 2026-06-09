@@ -23,9 +23,9 @@ export function Changelog() {
         </div>
 
         <p className="text-xs text-gray-600 dark:text-gray-400">
-          Mass Download now works on Reddit search (the Posts tab). Run it on any
-          search and it grabs images, galleries, videos, and RedGifs from the
-          results at full resolution.
+          Mass Download now works on Reddit search, both the Posts and Media
+          tabs. Run it on any search and it grabs images, galleries, videos, and
+          RedGifs from the results at full resolution.
         </p>
 
         <p className="text-xs text-gray-600 dark:text-gray-400">

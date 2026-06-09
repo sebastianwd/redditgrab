@@ -4,11 +4,18 @@ import { fetchPostMedia } from "./reddit-post-api";
 import { logger } from "./logger";
 
 /**
- * Search results do not render `shreddit-post` elements. Each result is a
- * `search-telemetry-tracker` wrapper with `[data-testid="search-sdui-post"]`
- * (image/gallery/redgifs) or an inner `[data-testid="search-post-with-content-preview"]`
- * (video). This module handles detection and per-result media extraction so the
- * existing mass-download pipeline can consume search pages.
+ * Search results do not render `shreddit-post` elements, so this module handles
+ * detecting them and extracting per-result media for the mass-download pipeline.
+ *
+ * Two layouts:
+ * - Posts tab: a `search-telemetry-tracker` wrapper with
+ *   `[data-testid="search-sdui-post"]` (image/gallery/redgifs) or an inner
+ *   `[data-testid="search-post-with-content-preview"]` (video).
+ * - Media tab: a thumbnail grid of `<a href="/comments/<id>/">` tiles (no
+ *   testid/thingid); the post id comes from the permalink.
+ *
+ * Galleries on the Posts tab read full images from the in-page carousel; every
+ * other case resolves full media via the post JSON (see reddit-post-api).
  */
 
 const RESULT_ROOT_SELECTOR =
@@ -27,28 +34,44 @@ export const isSearchResultsPage = (): boolean => {
   return document.querySelector(RESULT_ROOT_SELECTOR) !== null;
 };
 
+// Media-tab tiles wrap their media in these; Posts-tab rows never do.
+const MEDIA_GRID_SIGNAL =
+  '[data-id="search-media-post-unit"], a[href*="/comments/"] shreddit-aspect-ratio';
+
 /** True when on the search Media tab (grid of media thumbnails). */
 const isMediaSearchTab = (): boolean => {
+  // Posts/Comments tabs render these result roots; the Media grid does not.
+  if (document.querySelector(RESULT_ROOT_SELECTOR)) return false;
   const type = new URLSearchParams(window.location.search).get("type");
   if (type === "media") return true;
-  // Fallback: media tiles present and no Posts-tab roots.
-  if (document.querySelector(RESULT_ROOT_SELECTOR)) return false;
-  return document.querySelector(MEDIA_TILE_SELECTOR) !== null;
+  // Fallback when the URL param isn't present: detect the media grid in the DOM.
+  return document.querySelector(MEDIA_GRID_SIGNAL) !== null;
 };
 
-/** Media-tab grid tiles, one per post (the anchor that holds the thumbnail). */
+/**
+ * Media-tab grid tiles, one anchor per post. Each post has two `/comments/`
+ * links (the thumbnail tile and the title), so we dedupe by post id. We do NOT
+ * require an `<img>` — NSFW posts render blurred/placeholder thumbnails that
+ * aren't plain images, and filtering on `img` dropped every tile. When both
+ * anchors exist we prefer the one holding the thumbnail (better highlight/badge
+ * anchor), otherwise we keep the first seen.
+ */
 const getMediaTabRoots = (): Element[] => {
-  const seen = new Set<string>();
-  const roots: Element[] = [];
+  const byId = new Map<string, Element>();
   for (const anchor of document.querySelectorAll(MEDIA_TILE_SELECTOR)) {
-    // The post has two comments links (thumbnail + title); keep the media one.
-    if (!anchor.querySelector("img, faceplate-img")) continue;
     const id = anchor.getAttribute("href")?.match(COMMENTS_ID_RE)?.[1];
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    roots.push(anchor);
+    if (!id) continue;
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, anchor);
+    } else if (
+      anchor.querySelector("img, faceplate-img, video") &&
+      !existing.querySelector("img, faceplate-img, video")
+    ) {
+      byId.set(id, anchor);
+    }
   }
-  return roots;
+  return Array.from(byId.values());
 };
 
 /** All search result root elements currently in the DOM (Posts or Media tab). */

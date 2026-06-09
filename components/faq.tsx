@@ -157,11 +157,15 @@ export function FAQ() {
           </AccordionTrigger>
           <AccordionContent>
             <p className="text-xs text-gray-600 dark:text-gray-400">
-              Yes. Open a Reddit search, go to the{" "}
+              Yes. Open a Reddit search on the{" "}
               <span className="font-medium text-gray-800 dark:text-gray-200">
                 Posts
               </span>{" "}
-              tab, and hit Start Mass Download. It grabs images, galleries,
+              or{" "}
+              <span className="font-medium text-gray-800 dark:text-gray-200">
+                Media
+              </span>{" "}
+              tab and hit Start Mass Download. It grabs images, galleries,
               videos, and RedGifs from the results at full resolution.
             </p>
           </AccordionContent>

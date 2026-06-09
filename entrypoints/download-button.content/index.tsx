@@ -296,6 +296,7 @@ const unsupportedThingIds = new Set<string>();
 
 const scanSearchPageMedia = async () => {
   const roots = getSearchResultRoots();
+  logger.log(`Search scan: ${roots.length} result roots found`);
 
   const processedIds = await processedPostIds.getValue();
   const processedSet = new Set(processedIds);
@@ -357,6 +358,8 @@ const scanSearchPageMedia = async () => {
       }),
     ),
   );
+
+  logger.log(`Search scan: ${mediaCount} of ${roots.length} resolved to media`);
 
   return {
     success: true,
