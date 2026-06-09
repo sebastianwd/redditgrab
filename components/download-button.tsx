@@ -6,7 +6,9 @@ import {
   addTitleToImages as addTitleToImagesStorage,
   addTitleToVideos as addTitleToVideosStorage,
   markDownloadedAsVisited as markDownloadedAsVisitedStorage,
+  addProcessedPostId,
 } from "@/utils/storage";
+import { getPostIdentifier } from "@/utils/post-identifier";
 import { markPostAsVisited } from "@/utils/mark-visited";
 import { sendMessage } from "webext-bridge/content-script";
 import { Button } from "@/components/ui/button";
@@ -76,6 +78,11 @@ const DownloadButton = ({
       );
 
       if (downloadResponse?.success) {
+        if (postElement) {
+          // Record the download so it gets the "downloaded" marker and the mass
+          // downloader won't re-grab it.
+          await addProcessedPostId(getPostIdentifier(postElement));
+        }
         if (
           (await markDownloadedAsVisitedStorage.getValue()) &&
           postElement

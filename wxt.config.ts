@@ -6,6 +6,11 @@ import topLevelAwait from "vite-plugin-top-level-await";
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ["@wxt-dev/module-react", "@wxt-dev/auto-icons"],
+  // Open a Reddit page on `wxt dev` so the content script loads immediately.
+  // Points at a Posts search page for testing search-result downloads.
+  webExt: {
+    startUrls: ["https://www.reddit.com"],
+  },
   manifest: ({ browser }) => ({
     name: "Downloader for Reddit - RedditGrab",
     description:
