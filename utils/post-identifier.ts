@@ -8,12 +8,17 @@ import { getPostTitle, getPostAuthor } from "./post-utils";
 /**
  * Unicode-safe base64. Plain btoa throws on non-Latin1 characters (emoji /
  * community icons that show up in post titles), the exact case that previously
- * broke identification for those posts. Encoding to UTF-8 bytes first avoids
- * the throw, and for ASCII input the output is byte-for-byte identical to
- * btoa(input), so ids already stored by older versions stay stable.
+ * broke identification for those posts. Try btoa first so any input older
+ * versions could already encode produces the identical id (stored ids stay
+ * stable); only fall back to UTF-8 byte encoding for inputs that used to throw.
  */
-const toBase64 = (input: string): string =>
-  btoa(String.fromCharCode(...new TextEncoder().encode(input)));
+const toBase64 = (input: string): string => {
+  try {
+    return btoa(input);
+  } catch {
+    return btoa(String.fromCharCode(...new TextEncoder().encode(input)));
+  }
+};
 
 export const getPostIdentifier = (post: Element): string => {
   // Check if post already has our custom ID
