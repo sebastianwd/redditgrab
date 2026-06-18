@@ -10,28 +10,17 @@ const FFMPEG_OPTIONS = {
   classWorkerURL: new URL(workerURL, import.meta.url).href,
 };
 
-// Reuse a single ffmpeg instance. Creating a new one per download reloads the
-// ~30MB wasm core and allocates a fresh WASM heap each time; in a mass download
-// that churn OOMs Chrome's offscreen renderer (the "extension crashed" toast).
-let ffmpegInstance: FFmpeg | null = null;
-let ffmpegLoading: Promise<FFmpeg> | null = null;
+export const createFFmpeg = async () => {
+  logger.log("Creating ffmpeg");
+  const ffmpeg = new FFmpeg();
 
-export const createFFmpeg = async (): Promise<FFmpeg> => {
-  if (ffmpegInstance) return ffmpegInstance;
-  if (ffmpegLoading) return ffmpegLoading;
+  await ffmpeg.load(FFMPEG_OPTIONS);
 
-  ffmpegLoading = (async () => {
-    logger.log("Creating ffmpeg");
-    const ffmpeg = new FFmpeg();
-    ffmpeg.on("log", (message) => {
-      logger.log("FFmpeg log:", message);
-    });
-    await ffmpeg.load(FFMPEG_OPTIONS);
-    logger.log("Loaded ffmpeg");
-    ffmpegInstance = ffmpeg;
-    ffmpegLoading = null;
-    return ffmpeg;
-  })();
+  ffmpeg.on("log", (message) => {
+    logger.log("FFmpeg log:", message);
+  });
 
-  return ffmpegLoading;
+  logger.log("Loaded ffmpeg");
+
+  return ffmpeg;
 };
