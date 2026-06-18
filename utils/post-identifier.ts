@@ -6,19 +6,14 @@
 import { getPostTitle, getPostAuthor } from "./post-utils";
 
 /**
- * Stable, filesystem-agnostic hash of a string. Uses a plain numeric hash
- * instead of btoa, which throws on non-Latin1 characters (emoji / community
- * icons that show up in post titles), the exact case that previously broke
- * identification for those posts.
+ * Unicode-safe base64. Plain btoa throws on non-Latin1 characters (emoji /
+ * community icons that show up in post titles), the exact case that previously
+ * broke identification for those posts. Encoding to UTF-8 bytes first avoids
+ * the throw, and for ASCII input the output is byte-for-byte identical to
+ * btoa(input), so ids already stored by older versions stay stable.
  */
-const hashString = (input: string): string => {
-  let hash = 0;
-  for (let i = 0; i < input.length; i++) {
-    hash = (Math.imul(31, hash) + input.charCodeAt(i)) | 0;
-  }
-  // Unsigned, base36 for a short, stable token.
-  return (hash >>> 0).toString(36);
-};
+const toBase64 = (input: string): string =>
+  btoa(String.fromCharCode(...new TextEncoder().encode(input)));
 
 export const getPostIdentifier = (post: Element): string => {
   // Check if post already has our custom ID
@@ -43,7 +38,7 @@ export const getPostIdentifier = (post: Element): string => {
     return `reddit-post-fallback-${Date.now()}`;
   }
 
-  const contentHash = hashString(`${postTitle}-${postAuthor}`);
+  const contentHash = toBase64(`${postTitle}-${postAuthor}`).slice(0, 12);
   return `reddit-post-${contentHash}`;
 };
 
