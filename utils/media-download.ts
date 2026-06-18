@@ -329,6 +329,9 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
 
   const ffmpeg = await createFFmpeg();
 
+  // Tracked so the finally can free the in-memory FS even if processing throws.
+  const filesToClean: string[] = ["concatenated.m4s", "live.mkv", "live.mp4"];
+
   try {
 
     // Download and parse the m3u8 playlist
@@ -343,7 +346,7 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     logger.log("Found segments:", segments.length);
     logger.log("Init segment:", initSegment);
 
-    const segmentFiles = [];
+    const segmentFiles: string[] = [];
 
     // Download initialization segment if present
     if (initSegment) {
@@ -353,6 +356,7 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
       );
       await ffmpeg.writeFile("init.m4s", initData);
       segmentFiles.push("init.m4s");
+      filesToClean.push("init.m4s");
     }
 
     // Download all video segments
@@ -365,6 +369,7 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
       const filename = `segment_${i.toString().padStart(3, "0")}.m4s`;
       await ffmpeg.writeFile(filename, segmentData);
       segmentFiles.push(filename);
+      filesToClean.push(filename);
     }
 
     // For MP4 segments, we need to use binary concatenation, not the concat demuxer
@@ -391,18 +396,6 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     // Read the final video file
     const finalVideo = await ffmpeg.readFile("live.mp4");
 
-    const filesToClean = [
-      ...segmentFiles,
-      "concatenated.m4s",
-      "live.mkv",
-      "live.mp4",
-    ];
-    for (const file of filesToClean) {
-      try {
-        await ffmpeg.deleteFile(file);
-      } catch (e) {}
-    }
-
     const blob = new Blob([finalVideo as BlobPart], { type: "video/mp4" });
     const blobUrl = await createBlobUrl(blob);
 
@@ -412,7 +405,12 @@ export async function getRedGifsHLSVideoUrl(m3u8Url: string): Promise<string> {
     logger.error("Error processing RedGIFs HLS:", error);
     throw error;
   } finally {
-    ffmpeg.terminate();
+    // Reused instance: free the in-memory FS instead of terminating.
+    for (const file of filesToClean) {
+      try {
+        await ffmpeg.deleteFile(file);
+      } catch {}
+    }
   }
 }
 
@@ -543,7 +541,12 @@ export async function getHLSVideoUrl(m3u8Url: string) {
     const blob = new Blob([buffer], { type: "video/mp4" });
     return await createBlobUrl(blob);
   } finally {
-    ffmpeg.terminate();
+    // Reused instance: free the in-memory FS instead of terminating.
+    for (const file of ["video.ts", "audio.ts", "output.mp4"]) {
+      try {
+        await ffmpeg.deleteFile(file);
+      } catch {}
+    }
   }
 }
 
