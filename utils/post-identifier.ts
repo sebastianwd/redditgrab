@@ -5,6 +5,21 @@
  */
 import { getPostTitle, getPostAuthor } from "./post-utils";
 
+/**
+ * Stable, filesystem-agnostic hash of a string. Uses a plain numeric hash
+ * instead of btoa, which throws on non-Latin1 characters (emoji / community
+ * icons that show up in post titles), the exact case that previously broke
+ * identification for those posts.
+ */
+const hashString = (input: string): string => {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (Math.imul(31, hash) + input.charCodeAt(i)) | 0;
+  }
+  // Unsigned, base36 for a short, stable token.
+  return (hash >>> 0).toString(36);
+};
+
 export const getPostIdentifier = (post: Element): string => {
   // Check if post already has our custom ID
   const existingId = post.getAttribute("data-wxt-media-id");
@@ -28,7 +43,7 @@ export const getPostIdentifier = (post: Element): string => {
     return `reddit-post-fallback-${Date.now()}`;
   }
 
-  const contentHash = btoa(`${postTitle}-${postAuthor}`).slice(0, 12);
+  const contentHash = hashString(`${postTitle}-${postAuthor}`);
   return `reddit-post-${contentHash}`;
 };
 

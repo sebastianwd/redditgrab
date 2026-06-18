@@ -51,7 +51,7 @@ export interface DownloadRequestResponse {
 declare module "webext-bridge" {
   export interface ProtocolMap {
     SCAN_PAGE_MEDIA: ProtocolWithReturn<
-      { scrollUp?: boolean; anchorPostId?: string },
+      { scrollUp?: boolean; anchorPostId?: string; skipPostIds?: string[] },
       ScanPageMediaMessage
     >;
     GET_CURRENT_POST_ID: ProtocolWithReturn<
