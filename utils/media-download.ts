@@ -191,15 +191,20 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
       // Convert blob to data URL for Chrome Manifest V3 compatibility
       const dataUrl = await createBlobUrl(blob);
 
+      const outputPath = sanitizeDownloadPath(
+        `${finalFolderDestination}/${finalFilename}`,
+      );
+      logger.log("[RG image] download path:", outputPath);
+
       if (offscreen) {
         return {
           url: dataUrl,
-          filename: `${finalFolderDestination}/${finalFilename}`,
+          filename: outputPath,
         };
       }
       await browser.downloads.download({
         url: dataUrl,
-        filename: `${finalFolderDestination}/${finalFilename}`,
+        filename: outputPath,
         saveAs: false,
       });
     }),
@@ -222,22 +227,30 @@ export async function downloadVideo(options: DownloadVideoOptions) {
   } = options;
 
   try {
+    if (!initialUrl) {
+      throw new Error("downloadVideo called with no url");
+    }
+
     const getSourceUrl = async () => {
-      logger.log("Downloading video:", initialUrl);
+      logger.log("[RG video] start:", { initialUrl, offscreen, addTitleToVideo });
 
       if (initialUrl.includes(".m3u8")) {
         if (initialUrl.includes("api.redgifs.com")) {
+          logger.log("[RG video] resolving redgifs HLS");
           const hlsUrl = await getRedGifsHLSVideoUrl(initialUrl);
           return hlsUrl;
         } else {
+          logger.log("[RG video] resolving reddit HLS");
           const hlsUrl = await getHLSVideoUrl(initialUrl);
           return hlsUrl;
         }
       }
+      logger.log("[RG video] using direct url (no HLS)");
       return initialUrl;
     };
 
     const url = await getSourceUrl();
+    logger.log("[RG video] resolved source url:", url);
 
     const pattern = filenamePattern || "{subreddit}_{timestamp}_{filename}";
 
@@ -253,6 +266,8 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       extension,
       title: postTitle,
     });
+    const outputPath = sanitizeDownloadPath(`${folderDestination}/${filename}`);
+    logger.log("[RG video] download path:", outputPath);
 
     // If text overlay is enabled and we have a title, process the video
     if (addTitleToVideo && postTitle) {
@@ -269,12 +284,12 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         if (offscreen) {
           return {
             url: dataUrl,
-            filename: `${folderDestination}/${filename}`,
+            filename: outputPath,
           };
         }
         await browser.downloads.download({
           url: dataUrl,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
           saveAs: false,
         });
       } catch (error) {
@@ -285,12 +300,12 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         if (offscreen) {
           return {
             url,
-            filename: `${folderDestination}/${filename}`,
+            filename: outputPath,
           };
         }
         await browser.downloads.download({
           url,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
           saveAs: false,
         });
       }
@@ -298,17 +313,21 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       if (offscreen) {
         return {
           url,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
         };
       }
+      logger.log("[RG video] calling browser.downloads.download");
       await browser.downloads.download({
         url,
-        filename: `${folderDestination}/${filename}`,
+        filename: outputPath,
         saveAs: false,
       });
     }
   } catch (err) {
-    logger.error("Failed to parse packaged-media-json:", err);
+    // Surface the real error and propagate it: swallowing it made Firefox
+    // report a silent success and the failed post was never retried/skipped.
+    logger.error("[RG video] download failed:", err);
+    throw err;
   }
 }
 
@@ -477,7 +496,9 @@ async function fetchMediaWithFallback(
   const mp4Url = baseUrl.replace(".m3u8", ".mp4");
 
   try {
+    logger.log(`[RG hls] fetching ${primaryExtension}:`, primaryUrl);
     const response = await fetch(primaryUrl);
+    logger.log(`[RG hls] ${primaryExtension} status:`, response.status);
     if (!response.ok) {
       throw new Error(
         `Failed to fetch ${primaryExtension} file: ${response.status}`,
@@ -485,8 +506,9 @@ async function fetchMediaWithFallback(
     }
     return new Uint8Array(await response.arrayBuffer());
   } catch (error) {
-    logger.log(`Failed to fetch ${primaryExtension} file, trying .mp4:`, error);
+    logger.log(`[RG hls] ${primaryExtension} failed, trying .mp4:`, mp4Url, error);
     const response = await fetch(mp4Url);
+    logger.log(`[RG hls] .mp4 status:`, response.status);
     if (!response.ok) {
       throw new Error(`Failed to fetch .mp4 file: ${response.status}`);
     }
@@ -500,8 +522,8 @@ export async function getHLSVideoUrl(m3u8Url: string) {
   try {
     const [videoUrl, audioUrl] = m3u8Url.split(",");
 
-    logger.log("videoUrl", videoUrl);
-    logger.log("audioUrl", audioUrl);
+    logger.log("[RG hls] video playlist:", videoUrl);
+    logger.log("[RG hls] audio playlist:", audioUrl);
 
     const videoFile = await fetchMediaWithFallback(videoUrl, ".ts");
     await ffmpeg.writeFile("video.ts", videoFile);
@@ -522,13 +544,14 @@ export async function getHLSVideoUrl(m3u8Url: string) {
         "output.mp4",
       ]);
     } else {
-      logger.log("No audio URL provided, processing video only");
+      logger.log("[RG hls] no audio, video only");
       await ffmpeg.exec(["-i", "video.ts", "-c", "copy", "output.mp4"]);
     }
 
     const videoData = await ffmpeg.readFile("output.mp4");
     const buffer = new Uint8Array(videoData as unknown as ArrayBuffer);
     const blob = new Blob([buffer], { type: "video/mp4" });
+    logger.log("[RG hls] muxed mp4 bytes:", buffer.length);
     return await createBlobUrl(blob);
   } finally {
     ffmpeg.terminate();
@@ -551,7 +574,10 @@ type RedditPackagedMedia = {
 };
 
 export const getHighestQualityHLS = async (m3u8Url: string) => {
-  const playlist = await fetch(m3u8Url).then((r) => r.text());
+  logger.log("[RG hls] fetching master playlist:", m3u8Url);
+  const masterRes = await fetch(m3u8Url);
+  logger.log("[RG hls] master status:", masterRes.status);
+  const playlist = await masterRes.text();
 
   const lines = playlist.split("\n");
   let bestVideo: { resolution: number; url: string | null } = {
@@ -595,25 +621,36 @@ export const getHighestQualityHLS = async (m3u8Url: string) => {
       }
     }
   }
+  logger.log("[RG hls] picked video/audio:", {
+    video: bestVideo.url,
+    videoRes: bestVideo.resolution,
+    audio: bestAudio.url,
+  });
+  if (!bestVideo.url) {
+    logger.warn("[RG hls] no video variant found in master playlist");
+  }
   return [bestVideo.url, bestAudio.url].join(",");
 };
 
 export async function getVideoUrl(mediaElement: Element) {
-  logger.log("getting video url for", mediaElement);
+  logger.log("[RG video] resolving video url from element:", mediaElement?.tagName);
 
   const redGifsUrl = getRedGifsUrl(mediaElement);
   if (redGifsUrl) {
+    logger.log("[RG video] source: redgifs", redGifsUrl);
     return redGifsUrl;
   }
 
   // First check if there's a direct m3u8 URL (HLS stream)
   const sourceUrl = mediaElement.getAttribute("src");
+  logger.log("[RG video] element src:", sourceUrl);
   if (sourceUrl && sourceUrl.includes(".m3u8")) {
     if (sourceUrl.includes("api.redgifs.com")) {
       const url = await getRedGifsHLSVideoUrl(sourceUrl);
       return url;
     } else {
       // Reddit HLS
+      logger.log("[RG video] source: reddit HLS from src");
       const url = await getHighestQualityHLS(sourceUrl);
       return url;
     }
@@ -621,7 +658,7 @@ export async function getVideoUrl(mediaElement: Element) {
 
   const packagedMedia = mediaElement.getAttribute("packaged-media-json");
   if (!packagedMedia) {
-    console.error("No packaged-media-json found, falling back to src.");
+    logger.warn("[RG video] no packaged-media-json; falling back to src", sourceUrl);
     // Direct src (e.g. GIF or direct video from preview.redd.it – no packaged-media-json)
     if (sourceUrl) {
       return sourceUrl;
@@ -632,7 +669,7 @@ export async function getVideoUrl(mediaElement: Element) {
   const parsed = JSON.parse(packagedMedia) as RedditPackagedMedia;
   const mp4s = parsed.playbackMp4s?.permutations ?? [];
   if (!mp4s.length) {
-    console.error("No MP4 sources found.");
+    logger.warn("[RG video] packaged-media-json had no mp4 permutations");
     return;
   }
 
@@ -641,5 +678,6 @@ export async function getVideoUrl(mediaElement: Element) {
     b.source.dimensions.width > a.source.dimensions.width ? b : a,
   );
 
+  logger.log("[RG video] source: packaged-media mp4", best.source.url);
   return best.source.url;
 }

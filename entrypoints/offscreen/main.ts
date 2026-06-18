@@ -20,18 +20,36 @@ function handleMessages(message: OffscreenMessage & { downloadId?: string }) {
       downloadVideo({
         ...message.data,
         offscreen: true,
-      }).then((result) => {
-        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_VIDEO, result, downloadId);
-      });
+      })
+        .then((result) => {
+          sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_VIDEO, result, downloadId);
+        })
+        // Always respond, even on failure, so the background's pending download
+        // rejects instead of hanging forever (which froze the whole loop).
+        .catch((error) => {
+          sendToBackground(
+            OFFSCREEN_KEYS.DOWNLOAD_VIDEO,
+            { error: String(error) },
+            downloadId,
+          );
+        });
 
       break;
     case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
       downloadGalleryImages({
         ...message.data,
         offscreen: true,
-      }).then((result) => {
-        sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_IMAGE, result, downloadId);
-      });
+      })
+        .then((result) => {
+          sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_IMAGE, result, downloadId);
+        })
+        .catch((error) => {
+          sendToBackground(
+            OFFSCREEN_KEYS.DOWNLOAD_IMAGE,
+            { error: String(error) },
+            downloadId,
+          );
+        });
       break;
     default:
       console.warn(

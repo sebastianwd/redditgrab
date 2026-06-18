@@ -35,6 +35,28 @@ export function generateFilename(pattern: string, data: FilenameData): string {
   );
 }
 
+/**
+ * Sanitize a full download path for browser.downloads.download, which throws
+ * "filename must not contain illegal characters" otherwise. Cleans each "/"
+ * segment (folders + final filename) but keeps the separators: strips chars
+ * illegal on Windows/Chrome/Firefox plus control chars, collapses whitespace,
+ * and drops trailing dots/spaces (illegal per Windows path segment).
+ */
+export function sanitizeDownloadPath(path: string): string {
+  const segments = path
+    .split("/")
+    .map((segment) =>
+      segment
+        // eslint-disable-next-line no-control-regex
+        .replace(/[<>:"|?*\\\x00-\x1f\x7f]/g, "")
+        .replace(/\s+/g, " ")
+        .replace(/[ .]+$/g, "")
+        .trim(),
+    )
+    .filter((segment) => segment.length > 0);
+  return segments.join("/");
+}
+
 export function extractFilenameFromUrl(url: string): string {
   const urlPath = new URL(url).pathname;
   const lastPart = urlPath.split("/").pop()?.split(".")[0] || "file";
