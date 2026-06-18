@@ -300,8 +300,7 @@ const scanSearchPageMedia = async (skipPostIds: string[] = []) => {
 
   const processedIds = await processedPostIds.getValue();
   const processedSet = new Set(processedIds);
-  // Posts the mass downloader already failed to download this session. Skip them
-  // so a single failing post can't trap the loop into retrying it forever.
+  // Posts that already failed this run, so one failing post can't loop forever.
   const skipSet = new Set(skipPostIds);
 
   const useDateRangeFilter = await useDateRange.getValue();
@@ -588,8 +587,7 @@ export default defineContentScript({
       // Get already processed post IDs from storage
       const processedIds = await processedPostIds.getValue();
       const processedSet = new Set(processedIds);
-      // Posts the mass downloader already failed to download this session. Skip
-      // them so a single failing post can't trap the loop into retrying forever.
+      // Posts that already failed this run, so one failing post can't loop forever.
       const skipSet = new Set(skipPostIds);
 
       // Get date range settings
@@ -615,7 +613,6 @@ export default defineContentScript({
                 return null;
               }
 
-              // Skip posts that already failed to download this session
               if (skipSet.has(uniqueId)) {
                 logger.log(`Skipping post that failed to download: ${uniqueId}`);
                 return null;
