@@ -5,16 +5,6 @@
  */
 import { getPostTitle, getPostAuthor } from "./post-utils";
 
-// btoa throws on non-Latin1 input (emoji); btoa(input) keeps ids stable for
-// everything that already worked, the UTF-8 path only handles the throw.
-const toBase64 = (input: string): string => {
-  try {
-    return btoa(input);
-  } catch {
-    return btoa(String.fromCharCode(...new TextEncoder().encode(input)));
-  }
-};
-
 export const getPostIdentifier = (post: Element): string => {
   // Check if post already has our custom ID
   const existingId = post.getAttribute("data-wxt-media-id");
@@ -38,7 +28,7 @@ export const getPostIdentifier = (post: Element): string => {
     return `reddit-post-fallback-${Date.now()}`;
   }
 
-  const contentHash = toBase64(`${postTitle}-${postAuthor}`).slice(0, 12);
+  const contentHash = btoa(`${postTitle}-${postAuthor}`).slice(0, 12);
   return `reddit-post-${contentHash}`;
 };
 
