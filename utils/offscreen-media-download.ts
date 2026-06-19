@@ -96,16 +96,27 @@ export async function handleOffscreenMessages(message: any) {
 
   try {
     switch (message.type) {
-      case OFFSCREEN_KEYS.DOWNLOAD_VIDEO:
+      case OFFSCREEN_KEYS.DOWNLOAD_VIDEO: {
+        const video = message.data as { url?: string; filename?: string; error?: string };
+        if (!video?.url) {
+          throw new Error(video?.error || "No video file produced");
+        }
         await browser.downloads.download({
-          url: message.data.url,
-          filename: message.data.filename,
+          url: video.url,
+          filename: video.filename,
           saveAs: false,
         });
         break;
-      case OFFSCREEN_KEYS.DOWNLOAD_IMAGE:
+      }
+      case OFFSCREEN_KEYS.DOWNLOAD_IMAGE: {
+        const items = message.data as
+          | { url: string; filename: string }[]
+          | { error?: string };
+        if (!Array.isArray(items)) {
+          throw new Error(items?.error || "No image files produced");
+        }
         await Promise.all(
-          message.data.map((item: { url: string; filename: string }) =>
+          items.map((item) =>
             browser.downloads.download({
               url: item.url,
               filename: item.filename,
@@ -114,6 +125,7 @@ export async function handleOffscreenMessages(message: any) {
           )
         );
         break;
+      }
       default:
         console.warn(
           `Unexpected message received: '${JSON.stringify(message)}'.`

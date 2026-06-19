@@ -294,12 +294,14 @@ const refreshDownloadedMarkers = async () => {
 // processedPostIds so these never get a "downloaded" marker.
 const unsupportedThingIds = new Set<string>();
 
-const scanSearchPageMedia = async () => {
+const scanSearchPageMedia = async (skipPostIds: string[] = []) => {
   const roots = getSearchResultRoots();
   logger.log(`Search scan: ${roots.length} result roots found`);
 
   const processedIds = await processedPostIds.getValue();
   const processedSet = new Set(processedIds);
+  // Posts that already failed this run, so one failing post can't loop forever.
+  const skipSet = new Set(skipPostIds);
 
   const useDateRangeFilter = await useDateRange.getValue();
   const startDate = useDateRangeFilter
@@ -321,6 +323,11 @@ const scanSearchPageMedia = async () => {
 
         if (processedSet.has(thingId)) {
           logger.log(`Skipping already processed post: ${thingId}`);
+          return null;
+        }
+
+        if (skipSet.has(thingId)) {
+          logger.log(`Skipping post that failed to download: ${thingId}`);
           return null;
         }
 
@@ -545,11 +552,11 @@ export default defineContentScript({
     });
 
     onMessage("SCAN_PAGE_MEDIA", async ({ data }) => {
-      if (isSearchResultsPage()) {
-        return scanSearchPageMedia();
-      }
+      const { scrollUp = false, anchorPostId, skipPostIds = [] } = data ?? {};
 
-      const { scrollUp = false, anchorPostId } = data ?? {};
+      if (isSearchResultsPage()) {
+        return scanSearchPageMedia(skipPostIds);
+      }
 
       let postsArray = Array.from(document.querySelectorAll("shreddit-post"));
 
@@ -580,6 +587,8 @@ export default defineContentScript({
       // Get already processed post IDs from storage
       const processedIds = await processedPostIds.getValue();
       const processedSet = new Set(processedIds);
+      // Posts that already failed this run, so one failing post can't loop forever.
+      const skipSet = new Set(skipPostIds);
 
       // Get date range settings
       const useDateRangeFilter = await useDateRange.getValue();
@@ -601,6 +610,11 @@ export default defineContentScript({
               // Skip if we've already processed this post
               if (processedSet.has(uniqueId)) {
                 logger.log(`Skipping already processed post: ${uniqueId}`);
+                return null;
+              }
+
+              if (skipSet.has(uniqueId)) {
+                logger.log(`Skipping post that failed to download: ${uniqueId}`);
                 return null;
               }
 

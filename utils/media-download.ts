@@ -191,15 +191,19 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
       // Convert blob to data URL for Chrome Manifest V3 compatibility
       const dataUrl = await createBlobUrl(blob);
 
+      const outputPath = sanitizeDownloadPath(
+        `${finalFolderDestination}/${finalFilename}`,
+      );
+
       if (offscreen) {
         return {
           url: dataUrl,
-          filename: `${finalFolderDestination}/${finalFilename}`,
+          filename: outputPath,
         };
       }
       await browser.downloads.download({
         url: dataUrl,
-        filename: `${finalFolderDestination}/${finalFilename}`,
+        filename: outputPath,
         saveAs: false,
       });
     }),
@@ -222,6 +226,10 @@ export async function downloadVideo(options: DownloadVideoOptions) {
   } = options;
 
   try {
+    if (!initialUrl) {
+      throw new Error("downloadVideo called with no url");
+    }
+
     const getSourceUrl = async () => {
       logger.log("Downloading video:", initialUrl);
 
@@ -253,6 +261,7 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       extension,
       title: postTitle,
     });
+    const outputPath = sanitizeDownloadPath(`${folderDestination}/${filename}`);
 
     // If text overlay is enabled and we have a title, process the video
     if (addTitleToVideo && postTitle) {
@@ -269,12 +278,12 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         if (offscreen) {
           return {
             url: dataUrl,
-            filename: `${folderDestination}/${filename}`,
+            filename: outputPath,
           };
         }
         await browser.downloads.download({
           url: dataUrl,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
           saveAs: false,
         });
       } catch (error) {
@@ -285,12 +294,12 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         if (offscreen) {
           return {
             url,
-            filename: `${folderDestination}/${filename}`,
+            filename: outputPath,
           };
         }
         await browser.downloads.download({
           url,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
           saveAs: false,
         });
       }
@@ -298,17 +307,20 @@ export async function downloadVideo(options: DownloadVideoOptions) {
       if (offscreen) {
         return {
           url,
-          filename: `${folderDestination}/${filename}`,
+          filename: outputPath,
         };
       }
       await browser.downloads.download({
         url,
-        filename: `${folderDestination}/${filename}`,
+        filename: outputPath,
         saveAs: false,
       });
     }
   } catch (err) {
-    logger.error("Failed to parse packaged-media-json:", err);
+    // Rethrow so the failure propagates: swallowing it made Firefox report a
+    // silent success and the failed post was never retried/skipped.
+    logger.error("Video download failed:", err);
+    throw err;
   }
 }
 

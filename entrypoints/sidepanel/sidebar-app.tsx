@@ -300,6 +300,9 @@ function SidebarApp() {
   // Ref to control continuous processing loop
   const shouldContinueProcessingRef = useRef(false);
 
+  // Fed into each scan as skipPostIds so a failing post can't loop forever.
+  const failedPostIdsRef = useRef<Set<string>>(new Set());
+
   const handleMassScrape = async () => {
     try {
       const [tab] = await browser.tabs.query({
@@ -312,6 +315,7 @@ function SidebarApp() {
 
       startScraping();
       shouldContinueProcessingRef.current = true;
+      failedPostIdsRef.current = new Set();
 
       logger.log("Starting mass scraping from sidebar");
 
@@ -319,7 +323,11 @@ function SidebarApp() {
         let scanPayload: {
           scrollUp?: boolean;
           anchorPostId?: string;
-        } = { scrollUp: massDownloadScrollUp };
+          skipPostIds?: string[];
+        } = {
+          scrollUp: massDownloadScrollUp,
+          skipPostIds: [...failedPostIdsRef.current],
+        };
 
         if (massDownloadScrollUp) {
           try {
@@ -481,6 +489,7 @@ function SidebarApp() {
               }
             } else {
               console.error(`Download ${i + 1} failed:`, downloadResponse);
+              failedPostIdsRef.current.add(mediaItem.mediaPostId);
             }
 
             // Small delay between downloads to avoid overwhelming the system
@@ -489,6 +498,7 @@ function SidebarApp() {
             }
           } catch (error) {
             console.error(`Failed to download item ${i + 1}:`, error);
+            failedPostIdsRef.current.add(mediaItem.mediaPostId);
           }
         }
 
