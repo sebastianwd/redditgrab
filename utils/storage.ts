@@ -56,3 +56,11 @@ export const markDownloadedAsVisited = storage.defineItem(
   "local:markDownloadedAsVisited",
   { fallback: false },
 );
+
+// When on, mass download ignores the processed-post history and re-grabs posts
+// that were already downloaded. Lets the user redownload a page without clearing
+// their entire history.
+export const forceDownloadProcessed = storage.defineItem(
+  "local:forceDownloadProcessed",
+  { fallback: false },
+);

@@ -10,6 +10,7 @@ import {
   dateRangeStart,
   dateRangeEnd,
   showDownloadedMarkers,
+  forceDownloadProcessed,
 } from "@/utils/storage";
 import { compact } from "es-toolkit";
 import { logger } from "@/utils/logger";
@@ -298,8 +299,11 @@ const scanSearchPageMedia = async (skipPostIds: string[] = []) => {
   const roots = getSearchResultRoots();
   logger.log(`Search scan: ${roots.length} result roots found`);
 
+  // When force download is on, ignore the history so already-downloaded posts
+  // get re-grabbed.
+  const forceDownload = await forceDownloadProcessed.getValue();
   const processedIds = await processedPostIds.getValue();
-  const processedSet = new Set(processedIds);
+  const processedSet = new Set(forceDownload ? [] : processedIds);
   // Posts that already failed this run, so one failing post can't loop forever.
   const skipSet = new Set(skipPostIds);
 
@@ -584,9 +588,11 @@ export default defineContentScript({
 
       let mediaCount = 0;
 
-      // Get already processed post IDs from storage
+      // Get already processed post IDs from storage. When force download is on,
+      // ignore the history so already-downloaded posts get re-grabbed.
+      const forceDownload = await forceDownloadProcessed.getValue();
       const processedIds = await processedPostIds.getValue();
-      const processedSet = new Set(processedIds);
+      const processedSet = new Set(forceDownload ? [] : processedIds);
       // Posts that already failed this run, so one failing post can't loop forever.
       const skipSet = new Set(skipPostIds);
 
