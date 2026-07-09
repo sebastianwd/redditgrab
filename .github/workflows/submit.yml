@@ -1,0 +1,51 @@
+name: Submit to stores
+
+# Manual trigger only. Build the ZIPs in CI and submit them to the Chrome Web
+# Store and Firefox Add-ons via `wxt submit`. Run with dry_run first to validate
+# the store credentials without actually submitting.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (validate credentials, do not submit)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ZIPs
+        run: |
+          pnpm zip
+          pnpm zip:firefox
+
+      - name: Submit to Chrome Web Store + Firefox Add-ons
+        run: |
+          pnpm wxt submit ${{ inputs.dry_run && '--dry-run' || '' }} \
+            --chrome-zip .output/*-chrome.zip \
+            --firefox-zip .output/*-firefox.zip \
+            --firefox-sources-zip .output/*-sources.zip
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
