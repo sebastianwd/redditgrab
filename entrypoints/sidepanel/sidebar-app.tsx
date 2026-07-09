@@ -10,6 +10,7 @@ import {
   addTitleToVideos as addTitleToVideosStorage,
   markDownloadedAsVisited as markDownloadedAsVisitedStorage,
   showDownloadedMarkers as showDownloadedMarkersStorage,
+  forceDownloadProcessed as forceDownloadProcessedStorage,
   useDateRange as useDateRangeStorage,
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
@@ -80,6 +81,10 @@ const debouncedSaveShowDownloadedMarkers = debounce(async (value: boolean) => {
   await showDownloadedMarkersStorage.setValue(value);
 }, 500);
 
+const debouncedSaveForceDownloadProcessed = debounce(async (value: boolean) => {
+  await forceDownloadProcessedStorage.setValue(value);
+}, 500);
+
 const debouncedSaveUseDateRange = debounce(async (value: boolean) => {
   await useDateRangeStorage.setValue(value);
 }, 500);
@@ -111,6 +116,7 @@ function SidebarApp() {
       addTitleToVideos: false,
       markDownloadedAsVisited: false,
       showDownloadedMarkers: false,
+      forceDownloadProcessed: false,
       useDateRange: false,
       dateRangeStart: undefined,
       dateRangeEnd: undefined,
@@ -136,6 +142,7 @@ function SidebarApp() {
         addTitleToVideos,
         markDownloadedAsVisited,
         showDownloadedMarkers,
+        forceDownloadProcessed,
         useDateRange,
         dateRangeStart,
         dateRangeEnd,
@@ -148,6 +155,7 @@ function SidebarApp() {
         addTitleToVideosStorage.getValue(),
         markDownloadedAsVisitedStorage.getValue(),
         showDownloadedMarkersStorage.getValue(),
+        forceDownloadProcessedStorage.getValue(),
         useDateRangeStorage.getValue(),
         dateRangeStartStorage.getValue(),
         dateRangeEndStorage.getValue(),
@@ -167,6 +175,7 @@ function SidebarApp() {
         addTitleToVideos: addTitleToVideos || false,
         markDownloadedAsVisited: markDownloadedAsVisited || false,
         showDownloadedMarkers: showDownloadedMarkers || false,
+        forceDownloadProcessed: forceDownloadProcessed || false,
         useDateRange: useDateRange || false,
         dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
         dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
@@ -208,6 +217,11 @@ function SidebarApp() {
           case "showDownloadedMarkers":
             debouncedSaveShowDownloadedMarkers(
               value.showDownloadedMarkers || false,
+            );
+            break;
+          case "forceDownloadProcessed":
+            debouncedSaveForceDownloadProcessed(
+              value.forceDownloadProcessed || false,
             );
             break;
           case "useDateRange":
@@ -303,6 +317,12 @@ function SidebarApp() {
   // Fed into each scan as skipPostIds so a failing post can't loop forever.
   const failedPostIdsRef = useRef<Set<string>>(new Set());
 
+  // Post ids already handled during the current mass-download run. Fed into each
+  // scan as skipPostIds so the loop advances and terminates even when
+  // forceDownloadProcessed ignores the persistent history (otherwise the same
+  // posts would be re-scanned every cycle and never scroll/stop).
+  const handledThisRunRef = useRef<Set<string>>(new Set());
+
   const handleMassScrape = async () => {
     try {
       const [tab] = await browser.tabs.query({
@@ -316,6 +336,7 @@ function SidebarApp() {
       startScraping();
       shouldContinueProcessingRef.current = true;
       failedPostIdsRef.current = new Set();
+      handledThisRunRef.current = new Set();
 
       logger.log("Starting mass scraping from sidebar");
 
@@ -326,7 +347,10 @@ function SidebarApp() {
           skipPostIds?: string[];
         } = {
           scrollUp: massDownloadScrollUp,
-          skipPostIds: [...failedPostIdsRef.current],
+          skipPostIds: [
+            ...failedPostIdsRef.current,
+            ...handledThisRunRef.current,
+          ],
         };
 
         if (massDownloadScrollUp) {
@@ -362,6 +386,13 @@ function SidebarApp() {
         }
 
         const { mediaUrls } = response.data;
+
+        // Mark every scanned post as handled this run so it isn't re-scanned on
+        // the next cycle (needed for loop termination when force download
+        // ignores the persistent processed history).
+        for (const item of mediaUrls) {
+          handledThisRunRef.current.add(item.mediaPostId);
+        }
 
         const filteredMediaUrls = mediaUrls.filter((item) =>
           mediaTypeMatchesMassDownloadFilter(
@@ -907,6 +938,41 @@ function SidebarApp() {
                         <p className="text-xs">
                           Adds a green corner check to posts you've already
                           downloaded, on feeds and search results
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="forceDownloadProcessed"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Force redownload</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Ignores your download history during mass download, so
+                          posts you've already downloaded get grabbed again.
+                          Lets you redownload a page without clearing your
+                          history.
                         </p>
                       </TooltipContent>
                     </Tooltip>
