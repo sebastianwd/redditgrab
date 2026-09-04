@@ -48,6 +48,7 @@
     "@types/react-dom": "19.2.2",
     "@wxt-dev/auto-icons": "^1.1.0",
     "@wxt-dev/module-react": "^1.1.5",
+    "playwright": "^1.62.1",
     "postcss-rem-to-responsive-pixel": "^6.0.2",
     "tailwindcss": "4.1.17",
     "typescript": "5.9.2",

@@ -1,4 +1,5 @@
 import {
+  DownloadArchiveOptions,
   DownloadImageOptions,
   DownloadVideoOptions,
   isBackgroundMessage,
@@ -87,6 +88,30 @@ export const offscreenDownloadGalleryImages = async (
   await downloadComplete;
 };
 
+export const offscreenDownloadArchive = async (
+  options: DownloadArchiveOptions
+) => {
+  if (!browser.offscreen) {
+    return;
+  }
+
+  await createOffscreenDocument();
+
+  const downloadId = crypto.randomUUID();
+  const downloadComplete = new Promise<void>((resolve, reject) => {
+    pendingDownloads.set(downloadId, { resolve, reject });
+  });
+
+  await browser.runtime.sendMessage({
+    type: OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE,
+    target: MESSAGE_TARGET.OFFSCREEN,
+    data: options,
+    downloadId,
+  });
+
+  await downloadComplete;
+};
+
 export async function handleOffscreenMessages(message: any) {
   if (!isBackgroundMessage(message)) {
     return;
@@ -124,6 +149,22 @@ export async function handleOffscreenMessages(message: any) {
             })
           )
         );
+        break;
+      }
+      case OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE: {
+        const archive = message.data as {
+          url?: string;
+          filename?: string;
+          error?: string;
+        };
+        if (!archive?.url) {
+          throw new Error(archive?.error || "No archive file produced");
+        }
+        await browser.downloads.download({
+          url: archive.url,
+          filename: archive.filename,
+          saveAs: false,
+        });
         break;
       }
       default:

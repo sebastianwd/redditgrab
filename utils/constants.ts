@@ -18,4 +18,5 @@ export const MESSAGE_TARGET = {
 export const OFFSCREEN_KEYS = {
   DOWNLOAD_VIDEO: "download_video",
   DOWNLOAD_IMAGE: "download_image",
+  DOWNLOAD_ARCHIVE: "download_archive",
 } as const;

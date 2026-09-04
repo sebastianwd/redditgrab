@@ -48,6 +48,52 @@ export interface DownloadRequestResponse {
   message?: string;
 }
 
+/**
+ * The archive document is rendered in the content script (it needs `DOMParser`,
+ * which MV3 service workers lack) and handed to the background purely to be
+ * written to disk.
+ */
+export interface ScanPagePostsMessage {
+  success: boolean;
+  data: {
+    totalPosts: number;
+    posts: {
+      mediaPostId: string;
+      subredditName: string;
+      postTitle?: string;
+      postAuthor?: string;
+      postDate?: string;
+    }[];
+  };
+}
+
+export interface ArchivePostRequest {
+  mediaPostId: string;
+  subredditName?: string;
+  postTitle?: string;
+  postAuthor?: string;
+  postDate?: string;
+}
+
+export interface ArchivePostResponse {
+  success: boolean;
+  message?: string;
+  servedComments?: number;
+  moreStubs?: number;
+  htmlBytes?: number;
+  mediaInlined?: number;
+  subreddit?: string;
+  title?: string;
+}
+
+export interface ArchiveRequestMessage {
+  html: string;
+  folderDestination: string;
+  filename: string;
+  servedComments: number;
+  moreStubs: number;
+}
+
 declare module "webext-bridge" {
   export interface ProtocolMap {
     SCAN_PAGE_MEDIA: ProtocolWithReturn<
@@ -74,5 +120,14 @@ declare module "webext-bridge" {
       DownloadRequestMessage,
       DownloadRequestResponse
     >;
+    ARCHIVE_REQUEST: ProtocolWithReturn<
+      ArchiveRequestMessage,
+      DownloadRequestResponse
+    >;
+    SCAN_PAGE_POSTS: ProtocolWithReturn<
+      { scrollUp?: boolean; anchorPostId?: string; skipPostIds?: string[] },
+      ScanPagePostsMessage
+    >;
+    ARCHIVE_POST: ProtocolWithReturn<ArchivePostRequest, ArchivePostResponse>;
   }
 }

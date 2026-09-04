@@ -23,6 +23,18 @@ export type DownloadImageOptions = {
   offscreen?: boolean;
 };
 
+/**
+ * Writing the archive needs `URL.createObjectURL`, which an MV3 service worker
+ * does not have. Chrome rejects `data:` URLs in `downloads.download`
+ * ("Access denied for URL data:text/html..."), so the document is turned into a
+ * blob URL in the offscreen document, exactly like video and image downloads.
+ */
+export type DownloadArchiveOptions = {
+  html: string;
+  /** Full, already-sanitized output path including the .html filename. */
+  outputPath: string;
+};
+
 export interface BaseMessage {
   target: string;
   type: string;
@@ -40,7 +52,15 @@ export interface DownloadImageMessage extends BaseMessage {
   data: DownloadImageOptions;
 }
 
-export type OffscreenMessage = DownloadVideoMessage | DownloadImageMessage;
+export interface DownloadArchiveMessage extends BaseMessage {
+  type: typeof OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE;
+  data: DownloadArchiveOptions;
+}
+
+export type OffscreenMessage =
+  | DownloadVideoMessage
+  | DownloadImageMessage
+  | DownloadArchiveMessage;
 
 // Background message types (responses from offscreen)
 export interface DownloadVideoResponseMessage extends BaseMessage {
@@ -59,9 +79,18 @@ export interface DownloadImageResponseMessage extends BaseMessage {
   }[];
 }
 
+export interface DownloadArchiveResponseMessage extends BaseMessage {
+  type: typeof OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE;
+  data: {
+    url: string;
+    filename: string;
+  };
+}
+
 export type BackgroundMessage =
   | DownloadVideoResponseMessage
-  | DownloadImageResponseMessage;
+  | DownloadImageResponseMessage
+  | DownloadArchiveResponseMessage;
 
 // Type guards
 export function isOffscreenMessage(message: any): message is OffscreenMessage {

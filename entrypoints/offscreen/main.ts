@@ -1,5 +1,6 @@
 import { MESSAGE_TARGET, OFFSCREEN_KEYS } from "@/utils/constants";
 import { OffscreenMessage, isOffscreenMessage } from "@/types";
+import { buildArchiveDownload } from "@/utils/archive-download";
 
 browser.runtime.onMessage.addListener((message: any) => {
   if (!isOffscreenMessage(message)) {
@@ -46,6 +47,19 @@ function handleMessages(message: OffscreenMessage & { downloadId?: string }) {
         .catch((error) => {
           sendToBackground(
             OFFSCREEN_KEYS.DOWNLOAD_IMAGE,
+            { error: String(error) },
+            downloadId,
+          );
+        });
+      break;
+    case OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE:
+      buildArchiveDownload({ ...message.data, offscreen: true })
+        .then((result) => {
+          sendToBackground(OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE, result, downloadId);
+        })
+        .catch((error) => {
+          sendToBackground(
+            OFFSCREEN_KEYS.DOWNLOAD_ARCHIVE,
             { error: String(error) },
             downloadId,
           );

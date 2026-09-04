@@ -12,7 +12,8 @@ import { getPostIdentifier } from "@/utils/post-identifier";
 import { markPostAsVisited } from "@/utils/mark-visited";
 import { sendMessage } from "webext-bridge/content-script";
 import { Button } from "@/components/ui/button";
-import { Icon } from "@iconify/react";
+import DownloadIcon from "@/components/icons/download-icon";
+import { cn } from "@/utils/cn";
 import { getPostTitle, processFolderDestination } from "@/utils/post-utils";
 
 const DownloadButton = ({
@@ -106,9 +107,16 @@ const DownloadButton = ({
       size="sm"
       variant="secondary"
       disabled={isDownloading}
-      className="float-right mt-1 rounded-4xl relative cursor-pointer text-xs"
+      // Icon-only, so the label has to live in aria-label and title or the
+      // button is a mystery to both screen readers and hovering users.
+      aria-label={isDownloading ? "Downloading media" : "Download media"}
+      title={isDownloading ? "Downloading..." : "Download media"}
+      aria-busy={isDownloading}
+      className="float-right mt-1 rounded-4xl relative cursor-pointer px-2 text-xs"
     >
-      {isDownloading ? <>Downloading...</> : "Download"}
+      <DownloadIcon
+        className={cn("size-4", isDownloading && "animate-pulse")}
+      />
     </Button>
   );
 };

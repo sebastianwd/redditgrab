@@ -29,3 +29,8 @@ web-ext.config.ts
 *.njsproj
 *.sln
 *.sw?
+
+# Local test artifacts (e2e screenshots)
+post-actions-menu.png
+sidebar-*.png
+archive-verify-*.png

@@ -64,3 +64,18 @@ export const forceDownloadProcessed = storage.defineItem(
   "local:forceDownloadProcessed",
   { fallback: false },
 );
+
+// Post archive: embed media as data URIs so the saved HTML is one file that
+// works offline. Off means media is linked instead, which keeps the file small
+// but makes it useless without a connection.
+export const archiveInlineMedia = storage.defineItem(
+  "local:archiveInlineMedia",
+  { fallback: true },
+);
+
+// Video is inlined separately: a single Reddit video routinely outweighs the
+// entire rest of the archive.
+export const archiveInlineVideo = storage.defineItem(
+  "local:archiveInlineVideo",
+  { fallback: false },
+);

@@ -15,6 +15,8 @@ import {
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
   darkMode as darkModeStorage,
+  archiveInlineMedia as archiveInlineMediaStorage,
+  archiveInlineVideo as archiveInlineVideoStorage,
 } from "@/utils/storage";
 import { debounce } from "es-toolkit";
 import { sendMessage } from "webext-bridge/popup";
@@ -49,6 +51,7 @@ import {
   type MassDownloadMediaFilterValue,
 } from "@/components/mass-download-media-filter";
 import { processFolderDestination } from "@/utils/post-utils";
+import { cn } from "@/utils/cn";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
   await folderDestinationStorage.setValue(value);
@@ -130,6 +133,10 @@ function SidebarApp() {
   const [massDownloadScrollUp, setMassDownloadScrollUp] = useState(false);
   const [massDownloadMediaFilter, setMassDownloadMediaFilter] =
     useState<MassDownloadMediaFilterValue>("all");
+  const [activeMode, setActiveMode] = useState<"media" | "archive">("media");
+  const [massArchiveScrollUp, setMassArchiveScrollUp] = useState(false);
+  const [archiveInlineMedia, setArchiveInlineMedia] = useState(true);
+  const [archiveInlineVideo, setArchiveInlineVideo] = useState(false);
 
   // Load values from storage into form
   useEffect(() => {
@@ -188,6 +195,21 @@ function SidebarApp() {
 
     loadSettings();
   }, [form]);
+
+  // Archive options live outside the settings form: they are mode switches for
+  // the archive run, not download settings.
+  useEffect(() => {
+    const loadArchiveSettings = async () => {
+      const [inlineMedia, inlineVideo] = await Promise.all([
+        archiveInlineMediaStorage.getValue(),
+        archiveInlineVideoStorage.getValue(),
+      ]);
+      setArchiveInlineMedia(inlineMedia);
+      setArchiveInlineVideo(inlineVideo);
+    };
+
+    loadArchiveSettings();
+  }, []);
 
   // Watch form changes and save to storage
   useEffect(() => {
@@ -310,6 +332,13 @@ function SidebarApp() {
     addToTotalPostsFound,
     setCurrentPostInfo,
   } = useScrapingProgress();
+
+  // Mass archive runs the same loop with its own counters, so switching tabs
+  // mid-run never mixes the two progress readouts.
+  const archiveProgress = useScrapingProgress();
+  const shouldContinueArchivingRef = useRef(false);
+  const failedArchiveIdsRef = useRef<Set<string>>(new Set());
+  const archivedThisRunRef = useRef<Set<string>>(new Set());
 
   // Ref to control continuous processing loop
   const shouldContinueProcessingRef = useRef(false);
@@ -587,6 +616,198 @@ function SidebarApp() {
       shouldContinueProcessingRef.current = false;
       stopScraping();
     }
+  };
+
+  /**
+   * Mass archive: the same auto-scroll loop as mass download, but each post is
+   * turned into a self-contained HTML file instead of having its media pulled.
+   * Deliberately sequential: every post costs a JSON request plus its media, so
+   * running these in parallel would hammer Reddit and trip rate limits.
+   */
+  const handleMassArchive = async () => {
+    try {
+      const [tab] = await browser.tabs.query({
+        active: true,
+        currentWindow: true,
+      });
+      if (!tab?.id) {
+        throw new Error("No active tab found");
+      }
+
+      archiveProgress.startScraping();
+      shouldContinueArchivingRef.current = true;
+      failedArchiveIdsRef.current = new Set();
+      archivedThisRunRef.current = new Set();
+
+      logger.log("Starting mass archive from sidebar");
+
+      const processPage = async () => {
+        const scanPayload: {
+          scrollUp?: boolean;
+          anchorPostId?: string;
+          skipPostIds?: string[];
+        } = {
+          scrollUp: massArchiveScrollUp,
+          skipPostIds: [
+            ...failedArchiveIdsRef.current,
+            ...archivedThisRunRef.current,
+          ],
+        };
+
+        if (massArchiveScrollUp) {
+          try {
+            const anchorRes = await sendMessage(
+              "GET_CURRENT_POST_ID",
+              undefined,
+              `content-script@${tab.id}`,
+            );
+            if (anchorRes?.success && anchorRes.postId) {
+              scanPayload.anchorPostId = anchorRes.postId;
+            }
+          } catch (e) {
+            logger.warn("Could not get current post id for scroll up", e);
+          }
+        }
+
+        const response = await sendMessage(
+          "SCAN_PAGE_POSTS",
+          scanPayload,
+          `content-script@${tab.id}`,
+        );
+
+        if (!response?.success || !response.data) {
+          throw new Error("Failed to read posts from the page");
+        }
+
+        const { posts } = response.data;
+        for (const post of posts) {
+          archivedThisRunRef.current.add(post.mediaPostId);
+        }
+
+        archiveProgress.setCurrentBatchCount(posts.length);
+        archiveProgress.addToTotalPostsFound(posts.length);
+
+        for (let i = 0; i < posts.length; i++) {
+          const post = posts[i];
+
+          if (!shouldContinueArchivingRef.current) {
+            logger.log("Archiving stopped by user");
+            break;
+          }
+
+          archiveProgress.setCurrentPostInfo({
+            index: i + 1,
+            type: "archive",
+            subreddit: post.subredditName,
+          });
+
+          try {
+            await sendMessage(
+              "HIGHLIGHT_CURRENT_POST",
+              {
+                mediaPostId: post.mediaPostId,
+                subredditName: post.subredditName,
+                mediaType: "archive",
+              },
+              `content-script@${tab.id}`,
+            );
+          } catch (error) {
+            console.warn("Failed to highlight post:", error);
+          }
+
+          try {
+            const result = await sendMessage(
+              "ARCHIVE_POST",
+              {
+                mediaPostId: post.mediaPostId,
+                subredditName: post.subredditName,
+                postTitle: post.postTitle,
+                postAuthor: post.postAuthor,
+                postDate: post.postDate,
+              },
+              `content-script@${tab.id}`,
+            );
+
+            if (result?.success) {
+              archiveProgress.incrementDownloadCount();
+
+              const currentProcessedIds = await processedPostIds.getValue();
+              if (!currentProcessedIds.includes(post.mediaPostId)) {
+                await processedPostIds.setValue([
+                  ...currentProcessedIds,
+                  post.mediaPostId,
+                ]);
+              }
+
+              if (form.getValues("markDownloadedAsVisited")) {
+                try {
+                  await sendMessage(
+                    "MARK_POST_VISITED",
+                    { mediaPostId: post.mediaPostId },
+                    `content-script@${tab.id}`,
+                  );
+                } catch (e) {
+                  console.warn("Failed to mark post as visited:", e);
+                }
+              }
+            } else {
+              console.error(`Archive failed for ${post.mediaPostId}:`, result);
+              failedArchiveIdsRef.current.add(post.mediaPostId);
+            }
+          } catch (error) {
+            console.error(`Failed to archive ${post.mediaPostId}:`, error);
+            failedArchiveIdsRef.current.add(post.mediaPostId);
+          }
+
+          // Archiving a post is several requests. Pace it.
+          if (i < posts.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        }
+
+        archiveProgress.setCurrentPostInfo(null);
+
+        if (!shouldContinueArchivingRef.current) {
+          archiveProgress.stopScraping();
+          return;
+        }
+
+        if (posts.length > 0) {
+          setTimeout(() => {
+            if (shouldContinueArchivingRef.current) processPage();
+          }, 2000);
+          return;
+        }
+
+        if (massArchiveScrollUp) {
+          logger.log("No new posts found; reached the top. Mass archive done.");
+          archiveProgress.stopScraping();
+          return;
+        }
+
+        await sendMessage(
+          "SCROLL_TO_LOAD_MORE",
+          { scrollUp: massArchiveScrollUp },
+          `content-script@${tab.id}`,
+        );
+        setTimeout(() => {
+          if (shouldContinueArchivingRef.current) processPage();
+        }, 3000);
+      };
+
+      processPage();
+    } catch (error) {
+      console.error("Failed to start mass archive:", error);
+      shouldContinueArchivingRef.current = false;
+      archiveProgress.stopScraping();
+    }
+  };
+
+  const handleStopArchiving = async () => {
+    shouldContinueArchivingRef.current = false;
+    archiveProgress.setCurrentPostInfo(null);
+    archiveProgress.stopScraping();
+    logger.log("Mass archive stopped");
   };
 
   const handleStopScraping = async () => {
@@ -1072,7 +1293,183 @@ function SidebarApp() {
         </div>
       </Form>
 
-      <div className="space-y-3">
+      {/* Mode switch. Media and archive share the folder and date settings
+          above, but run as separate jobs with separate progress. */}
+      <div className="mb-3 flex rounded-md border border-gray-200 dark:border-gray-700 p-0.5">
+        {(
+          [
+            { id: "media", label: "Media", icon: "lucide:image-down" },
+            { id: "archive", label: "Archive", icon: "lucide:archive" },
+          ] as const
+        ).map((mode) => (
+          <button
+            key={mode.id}
+            type="button"
+            role="tab"
+            aria-selected={activeMode === mode.id}
+            onClick={() => setActiveMode(mode.id)}
+            disabled={
+              // Don't let the user wander off mid-run: the other tab's start
+              // button would kick off a second scroll loop on the same page.
+              scrapingStatus.isScraping || archiveProgress.scrapingStatus.isScraping
+            }
+            className={cn(
+              "flex flex-1 items-center justify-center gap-1.5 rounded px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+              activeMode === mode.id
+                ? "bg-orange-500 text-white"
+                : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700",
+            )}
+          >
+            <Icon icon={mode.icon} className="w-3.5 h-3.5" />
+            {mode.label}
+          </button>
+        ))}
+      </div>
+
+      {activeMode === "archive" && (
+        <div className="space-y-3">
+          {!archiveProgress.scrapingStatus.isScraping ? (
+            <Button onClick={handleMassArchive} className="w-full">
+              <Icon icon="lucide:archive" className="w-4 h-4" />
+              Start Mass Archive
+            </Button>
+          ) : (
+            <Button
+              onClick={handleStopArchiving}
+              variant="destructive"
+              className="w-full"
+            >
+              <Icon icon="lucide:square" className="w-4 h-4" />
+              Stop Archiving
+            </Button>
+          )}
+          <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+            {archiveProgress.scrapingStatus.isScraping
+              ? "Auto-scrolling and saving posts as HTML..."
+              : "Saves each post on the page (text, media, comments) as one HTML file"}
+          </p>
+
+          {!archiveProgress.scrapingStatus.isScraping && (
+            <div className="space-y-3 pl-1">
+              <div className="flex flex-row items-center space-x-2">
+                <Checkbox
+                  id="mass-archive-scroll-up"
+                  checked={massArchiveScrollUp}
+                  onCheckedChange={(checked) =>
+                    setMassArchiveScrollUp(checked === true)
+                  }
+                />
+                <label
+                  htmlFor="mass-archive-scroll-up"
+                  className="text-xs text-gray-500 dark:text-gray-400 leading-none cursor-pointer select-none"
+                >
+                  Scroll up from current post
+                </label>
+              </div>
+
+              <div className="flex flex-row items-start space-x-2">
+                <Checkbox
+                  id="archive-inline-media"
+                  checked={archiveInlineMedia}
+                  onCheckedChange={(checked) => {
+                    const value = checked === true;
+                    setArchiveInlineMedia(value);
+                    archiveInlineMediaStorage.setValue(value);
+                  }}
+                />
+                <label
+                  htmlFor="archive-inline-media"
+                  className="text-xs text-gray-500 dark:text-gray-400 leading-tight cursor-pointer select-none"
+                >
+                  Embed images in the file
+                  <span className="block text-[10px] text-gray-400 dark:text-gray-500">
+                    Off keeps files small but they need a connection to show
+                    media
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex flex-row items-start space-x-2">
+                <Checkbox
+                  id="archive-inline-video"
+                  checked={archiveInlineVideo}
+                  disabled={!archiveInlineMedia}
+                  onCheckedChange={(checked) => {
+                    const value = checked === true;
+                    setArchiveInlineVideo(value);
+                    archiveInlineVideoStorage.setValue(value);
+                  }}
+                />
+                <label
+                  htmlFor="archive-inline-video"
+                  className={cn(
+                    "text-xs leading-tight cursor-pointer select-none",
+                    archiveInlineMedia
+                      ? "text-gray-500 dark:text-gray-400"
+                      : "text-gray-400 dark:text-gray-600",
+                  )}
+                >
+                  Embed videos too
+                  <span className="block text-[10px] text-gray-400 dark:text-gray-500">
+                    One video can outweigh everything else in the archive
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
+
+          {archiveProgress.scrapingStatus.isScraping && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                  Archived: {archiveProgress.scrapingStatus.downloadedCount}/
+                  {archiveProgress.scrapingStatus.totalPostsFound}
+                </span>
+                <span className="text-xs text-blue-600 dark:text-blue-300">
+                  {archiveProgress.scrapingStatus.totalPostsFound > 0
+                    ? Math.round(
+                        (archiveProgress.scrapingStatus.downloadedCount /
+                          archiveProgress.scrapingStatus.totalPostsFound) *
+                          100,
+                      )
+                    : 0}
+                  %
+                </span>
+              </div>
+              <div className="w-full bg-blue-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${
+                      archiveProgress.scrapingStatus.totalPostsFound > 0
+                        ? (archiveProgress.scrapingStatus.downloadedCount /
+                            archiveProgress.scrapingStatus.totalPostsFound) *
+                          100
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
+              {archiveProgress.scrapingStatus.currentPostInfo && (
+                <div className="flex items-center justify-center mt-2">
+                  <Icon
+                    icon="lucide:loader-2"
+                    className="animate-spin mr-2 size-3 text-blue-600"
+                  />
+                  <p className="text-xs text-blue-600">
+                    Archiving post{" "}
+                    {archiveProgress.scrapingStatus.currentPostInfo.index} from
+                    r/
+                    {archiveProgress.scrapingStatus.currentPostInfo.subreddit}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className={cn("space-y-3", activeMode !== "media" && "hidden")}>
         {!scrapingStatus.isScraping ? (
           <Button onClick={handleMassScrape} className="w-full">
             <Icon icon="lucide:download" className="w-4 h-4" />
@@ -1167,7 +1564,7 @@ function SidebarApp() {
         )}
       </div>
 
-      {!scrapingStatus.isScraping && (
+      {!scrapingStatus.isScraping && !archiveProgress.scrapingStatus.isScraping && (
         <div className="mt-3 text-center">
           <Button
             onClick={handleClearProcessedPosts}

@@ -1,5 +1,7 @@
 import { onMessage } from "webext-bridge/background";
-import { DownloadRequestMessage } from "@/types/shim";
+import { ArchiveRequestMessage, DownloadRequestMessage } from "@/types/shim";
+import { buildArchiveDownload } from "@/utils/archive-download";
+import { offscreenDownloadArchive } from "@/utils/offscreen-media-download";
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(handleOffscreenMessages);
@@ -11,6 +13,21 @@ export default defineBackground(() => {
     } catch (error) {
       console.error("Download request failed:", error);
       return { success: false, message: (error as Error).message };
+    }
+  });
+
+  onMessage("ARCHIVE_REQUEST", async ({ data }) => {
+    try {
+      await handleArchiveRequest(data);
+      return { success: true };
+    } catch (error) {
+      console.error("[RedditGrab] Archive request failed:", error);
+      // The message travels back to the button, which now displays it, so the
+      // user is not left with a bare "Failed".
+      return {
+        success: false,
+        message: (error as Error)?.message || String(error),
+      };
     }
   });
 
@@ -48,6 +65,36 @@ export default defineBackground(() => {
     logger.log("Registered MV3 action.onClicked listener");
   }
 });
+
+/**
+ * The archive HTML arrives already rendered (the content script has the DOM
+ * APIs the sanitizer needs). All that is left is writing it to disk.
+ *
+ * It cannot be written from here directly on Chrome: an MV3 service worker has
+ * no `URL.createObjectURL`, and `downloads.download` rejects `data:` URLs with
+ * "Access denied for URL data:text/html...". So the blob URL is minted in the
+ * offscreen document, the same detour the video and image paths take. Firefox
+ * MV2 has a real background page, so it does the work inline.
+ */
+async function handleArchiveRequest(data: ArchiveRequestMessage) {
+  const outputPath = sanitizeDownloadPath(
+    `${data.folderDestination || "Reddit Downloads"}/${data.filename}`,
+  );
+
+  logger.log(
+    `Saving archive: ${outputPath} (${data.servedComments} comments, ${data.moreStubs} capped threads)`,
+  );
+
+  const options = { html: data.html, outputPath } as const;
+
+  if (browser.offscreen) {
+    await offscreenDownloadArchive(options);
+    return;
+  }
+
+  const { url, filename } = await buildArchiveDownload(options);
+  await browser.downloads.download({ url, filename, saveAs: false });
+}
 
 async function handleDownloadRequest(data: DownloadRequestMessage) {
   logger.log("Processing download request22:", data);

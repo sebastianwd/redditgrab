@@ -1,7 +1,8 @@
 import "~/assets/tailwind.css";
 import ReactDOM from "react-dom/client";
 import type { MediaContentType } from "~/types";
-import DownloadButton from "@/components/download-button";
+import PostActions from "@/components/post-actions";
+import { archivePost } from "@/utils/archive/archive-post";
 import { onMessage } from "webext-bridge/content-script";
 import { Selectors } from "@/utils/constants";
 import {
@@ -436,16 +437,27 @@ export default defineContentScript({
       return null;
     };
 
+    /**
+     * Mounts the per-post action cluster: Download plus a caret holding the
+     * archive action.
+     *
+     * A post with no downloadable media still gets the cluster on its own page,
+     * because a text post is exactly the thing worth archiving. In feeds it is
+     * skipped, so a text-heavy feed does not sprout a control on every post;
+     * mass archive from the sidebar covers that case.
+     */
     const attachButtons = async () => {
-      const elements = document.querySelectorAll("shreddit-post");
+      const isPostPage = /\/comments\//.test(window.location.pathname);
+      const elements = Array.from(document.querySelectorAll("shreddit-post"));
+
+      let attached = 0;
 
       await Promise.all(
-        Array.from(elements).map(async (element) => {
+        elements.map(async (element) => {
           if (mountedUIs.has(element)) return;
 
           const mediaContainer = getMediaContainer(element);
-
-          if (!mediaContainer) return;
+          if (!mediaContainer && !isPostPage) return;
 
           const ui = await createShadowRootUi(ctx, {
             name: "media-downloader-button",
@@ -453,7 +465,7 @@ export default defineContentScript({
             anchor: element,
             append: "last",
             onMount: (container) => {
-              const style = document.createElement('style');
+              const style = document.createElement("style");
               style.textContent = `
                 button { margin-top: 0 !important; }
                 div { line-height: normal !important; }
@@ -468,9 +480,10 @@ export default defineContentScript({
               container.append(app);
               const root = ReactDOM.createRoot(app);
               root.render(
-                <DownloadButton
-                  mediaContainer={mediaContainer.element}
-                  mediaContentType={mediaContainer.type}
+                <PostActions
+                  postElement={element}
+                  mediaContainer={mediaContainer?.element ?? null}
+                  mediaContentType={mediaContainer?.type ?? null}
                 />,
               );
               return root;
@@ -482,10 +495,11 @@ export default defineContentScript({
 
           ui.mount();
           mountedUIs.add(element);
+          attached++;
         }),
       );
 
-      logger.log(`Attached buttons to ${elements.length} elements`);
+      if (attached) logger.log(`Attached post actions to ${attached} post(s)`);
     };
 
     await attachButtons();
@@ -663,6 +677,91 @@ export default defineContentScript({
           mediaUrls,
         },
       };
+    });
+
+    /**
+     * Mass archive's scan pass. Unlike SCAN_PAGE_MEDIA this does not require a
+     * media container: every post on the page is archivable, text posts most of
+     * all. Honours the same processed-history, skip and date-range rules so the
+     * two mass modes behave identically.
+     */
+    onMessage("SCAN_PAGE_POSTS", async ({ data }) => {
+      const { scrollUp = false, anchorPostId, skipPostIds = [] } = data ?? {};
+
+      let postsArray = Array.from(document.querySelectorAll("shreddit-post"));
+
+      if (scrollUp && anchorPostId) {
+        let anchorIndex = -1;
+        for (let i = 0; i < postsArray.length; i++) {
+          setPostIdentifier(postsArray[i]);
+          if (getPostIdentifier(postsArray[i]) === anchorPostId) {
+            anchorIndex = i;
+            break;
+          }
+        }
+        if (anchorIndex >= 0) {
+          postsArray = postsArray.slice(0, anchorIndex + 1).toReversed();
+        }
+      }
+
+      const forceDownload = await forceDownloadProcessed.getValue();
+      const processedIds = await processedPostIds.getValue();
+      const processedSet = new Set(forceDownload ? [] : processedIds);
+      const skipSet = new Set(skipPostIds);
+
+      const useDateRangeFilter = await useDateRange.getValue();
+      const startDate = useDateRangeFilter
+        ? await dateRangeStart.getValue()
+        : undefined;
+      const endDate = useDateRangeFilter
+        ? await dateRangeEnd.getValue()
+        : undefined;
+
+      const posts = compact(
+        postsArray.map((post) => {
+          const uniqueId = setPostIdentifier(post);
+          if (processedSet.has(uniqueId)) return null;
+          if (skipSet.has(uniqueId)) return null;
+          if (!isPostInDateRange(post, startDate, endDate)) return null;
+
+          return {
+            mediaPostId: uniqueId,
+            subredditName: getSubredditNameFromContainer(post),
+            postTitle: getPostTitle(post),
+            postAuthor: getPostAuthor(post),
+            postDate: getPostDate(post),
+          };
+        }),
+      );
+
+      return { success: true, data: { totalPosts: posts.length, posts } };
+    });
+
+    /**
+     * Archive one post. Runs here rather than in the sidebar because building
+     * the document needs the page's cookies and `DOMParser`.
+     */
+    onMessage("ARCHIVE_POST", async ({ data }) => {
+      try {
+        const postElement = document.querySelector(
+          `[data-wxt-media-id="${data.mediaPostId}"]`,
+        );
+        const stats = await archivePost({
+          postId: data.mediaPostId,
+          postElement,
+          subredditName: data.subredditName,
+          postTitle: data.postTitle,
+          postAuthor: data.postAuthor,
+          postDate: data.postDate,
+        });
+        return { success: true, ...stats };
+      } catch (error) {
+        console.error("[RedditGrab] Mass archive failed for a post:", error);
+        return {
+          success: false,
+          message: (error as Error)?.message ?? String(error),
+        };
+      }
     });
 
     onMessage("HIGHLIGHT_CURRENT_POST", async ({ data }) => {
