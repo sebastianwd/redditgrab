@@ -637,11 +637,22 @@ export default defineContentScript({
 
               mediaCount++;
 
-              return {
-                urls: await getDownloadUrlsFromContainer(
+              let urls: string[];
+              try {
+                urls = await getDownloadUrlsFromContainer(
                   mediaContainer.element,
                   mediaContainer.type,
-                ),
+                );
+              } catch (error) {
+                logger.warn(
+                  `Skipping post ${uniqueId}: media URL extraction failed`,
+                  error,
+                );
+                return null;
+              }
+
+              return {
+                urls,
                 type: mediaContainer.type,
                 subredditName,
                 mediaPostId: uniqueId,

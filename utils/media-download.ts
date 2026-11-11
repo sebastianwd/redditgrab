@@ -563,7 +563,13 @@ type RedditPackagedMedia = {
 };
 
 export const getHighestQualityHLS = async (m3u8Url: string) => {
-  const playlist = await fetch(m3u8Url).then((r) => r.text());
+  const response = await fetch(m3u8Url);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch Reddit HLS playlist: ${response.status} ${response.statusText}`,
+    );
+  }
+  const playlist = await response.text();
 
   const lines = playlist.split("\n");
   let bestVideo: { resolution: number; url: string | null } = {
@@ -606,6 +612,10 @@ export const getHighestQualityHLS = async (m3u8Url: string) => {
         }
       }
     }
+  }
+
+  if (!bestVideo.url) {
+    throw new Error("Reddit HLS playlist did not contain a video stream");
   }
   return [bestVideo.url, bestAudio.url].join(",");
 };
