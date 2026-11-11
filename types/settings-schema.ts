@@ -14,11 +14,24 @@ export const SettingsSchema = type({
   markDownloadedAsVisited: "boolean",
   showDownloadedMarkers: "boolean",
   forceDownloadProcessed: "boolean",
+  enableDownloadDelay: "boolean",
+  downloadDelaySeconds: "number",
   useDateRange: "boolean",
   // Accept number or undefined for timestamps, validate in pipe
   "dateRangeStart?": "number | undefined",
   "dateRangeEnd?": "number | undefined",
 }).narrow((data, ctx) => {
+  if (
+    !Number.isFinite(data.downloadDelaySeconds) ||
+    data.downloadDelaySeconds < 0 ||
+    data.downloadDelaySeconds > 60
+  ) {
+    return ctx.reject({
+      message: "Download delay must be between 0 and 60 seconds",
+      path: ["downloadDelaySeconds"],
+    });
+  }
+
   // Additional validation when useDateRange is true
   if (data.useDateRange) {
     // Validate start date range
