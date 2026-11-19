@@ -3,6 +3,14 @@ import { logger } from "./logger";
 import { createBlobUrl } from "./blob-utils";
 import { DownloadImageOptions, DownloadVideoOptions } from "@/types";
 import { compact } from "es-toolkit";
+import {
+  hashImagePerceptually,
+  hashMediaBlob,
+  hasMediaHash,
+  hasSimilarImageHash,
+  saveImagePerceptualHash,
+  saveMediaHash,
+} from "./media-hash";
 
 export const getRedGifsUrl = (mediaElement: Element): string | null => {
   let embed: Element | null = null;
@@ -100,7 +108,10 @@ export async function getGalleryImageUrls(mediaElement: Element) {
 }
 
 async function getRemoteFile(url: string) {
-  const response = await fetch(url, { mode: "no-cors" });
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch media: ${response.status} ${response.statusText}`);
+  }
   const contentType = response.headers.get("content-type");
 
   let extension = "jpg";
@@ -132,6 +143,7 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
     postTitle,
     postAuthor,
     offscreen = false,
+    skipDuplicateMedia = false,
   } = options;
 
   logger.log("Downloading gallery images:", urls);
@@ -149,8 +161,10 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
       ? `${folderDestination}/${subredditName}${galleryFolderSuffix}`
       : folderDestination;
 
-  const results = await Promise.all(
-    urls.map(async (url, index) => {
+  const results = [];
+  const seenHashes = new Set<string>();
+  const seenPerceptualHashes = new Set<string>();
+  for (const [index, url] of urls.entries()) {
       let { extension, blob } = await getRemoteFile(url);
 
       // Apply text overlay if enabled and we have a title
@@ -193,23 +207,51 @@ export async function downloadGalleryImages(options: DownloadImageOptions) {
       // Convert blob to data URL for Chrome Manifest V3 compatibility
       const dataUrl = await createBlobUrl(blob);
 
+      let hash: string | undefined;
+      let perceptualHash: string | undefined;
+      if (skipDuplicateMedia) {
+        hash = await hashMediaBlob(blob);
+        if (extension !== "gif") {
+          perceptualHash = await hashImagePerceptually(blob);
+        }
+        if (
+          (perceptualHash && seenPerceptualHashes.has(perceptualHash)) ||
+          (perceptualHash && (await hasSimilarImageHash(perceptualHash))) ||
+          seenHashes.has(hash) ||
+          (await hasMediaHash(hash))
+        ) {
+          logger.log("Skipping visually duplicate image:", perceptualHash);
+          continue;
+        }
+        seenHashes.add(hash);
+        if (perceptualHash) seenPerceptualHashes.add(perceptualHash);
+      }
+
       const outputPath = sanitizeDownloadPath(
         `${finalFolderDestination}/${finalFilename}`,
       );
 
       if (offscreen) {
-        return {
+        results.push({
           url: dataUrl,
           filename: outputPath,
-        };
+          hash,
+          perceptualHash,
+          skipDuplicateMedia,
+        });
+        continue;
       }
       await browser.downloads.download({
         url: dataUrl,
         filename: outputPath,
         saveAs: false,
       });
-    }),
-  );
+      if (hash) {
+        await saveMediaHash(hash);
+        if (perceptualHash) await saveImagePerceptualHash(perceptualHash);
+      }
+      results.push(undefined);
+  }
 
   if (offscreen) {
     return compact(results);
@@ -226,6 +268,7 @@ export async function downloadVideo(options: DownloadVideoOptions) {
     postAuthor,
     filenamePattern,
     offscreen = false,
+    skipDuplicateMedia = false,
   } = options;
 
   try {
@@ -267,6 +310,31 @@ export async function downloadVideo(options: DownloadVideoOptions) {
     });
     const outputPath = sanitizeDownloadPath(`${folderDestination}/${filename}`);
 
+    const deliverHashedVideo = async (blob: Blob) => {
+      const hash = await hashMediaBlob(blob);
+      if (await hasMediaHash(hash)) {
+        logger.log("Skipping duplicate video content:", hash);
+        return offscreen
+          ? { url: "", filename: outputPath, hash, skipDuplicateMedia, skipped: true }
+          : undefined;
+      }
+      const dataUrl = await createBlobUrl(blob);
+      if (offscreen) {
+        return { url: dataUrl, filename: outputPath, hash, skipDuplicateMedia };
+      }
+      await browser.downloads.download({ url: dataUrl, filename: outputPath, saveAs: false });
+      await saveMediaHash(hash);
+    };
+
+    let mediaBlob: Blob | undefined;
+    if (skipDuplicateMedia && !(addTitleToVideo && postTitle)) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
+      }
+      mediaBlob = await response.blob();
+    }
+
     // If text overlay is enabled and we have a title, process the video
     if (addTitleToVideo && postTitle) {
       try {
@@ -276,6 +344,10 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         const videoBlob = await response.blob();
 
         const processedVideoBlob = await addTextToVideo(videoBlob, postTitle);
+
+        if (skipDuplicateMedia) {
+          return await deliverHashedVideo(processedVideoBlob);
+        }
 
         const dataUrl = await createBlobUrl(processedVideoBlob);
 
@@ -295,6 +367,13 @@ export async function downloadVideo(options: DownloadVideoOptions) {
           "Failed to add text to video, downloading original:",
           error,
         );
+        if (skipDuplicateMedia) {
+          const response = await fetch(url);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch video: ${response.status} ${response.statusText}`);
+          }
+          return await deliverHashedVideo(await response.blob());
+        }
         if (offscreen) {
           return {
             url,
@@ -308,6 +387,9 @@ export async function downloadVideo(options: DownloadVideoOptions) {
         });
       }
     } else {
+      if (skipDuplicateMedia && mediaBlob) {
+        return await deliverHashedVideo(mediaBlob);
+      }
       if (offscreen) {
         return {
           url,
@@ -451,6 +533,7 @@ function parseRedGifsPlaylist(playlistText: string) {
         i++; // Skip the next line since we processed it
       }
     }
+
   }
 
   return { initSegment, segments };

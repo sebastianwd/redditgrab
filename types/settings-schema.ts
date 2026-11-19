@@ -14,6 +14,7 @@ export const SettingsSchema = type({
   markDownloadedAsVisited: "boolean",
   showDownloadedMarkers: "boolean",
   forceDownloadProcessed: "boolean",
+  skipDuplicateMedia: "boolean",
   useDateRange: "boolean",
   // Accept number or undefined for timestamps, validate in pipe
   "dateRangeStart?": "number | undefined",
