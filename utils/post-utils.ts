@@ -35,10 +35,30 @@ export const getPostTitle = (post: Element): string => {
 export const getPostAuthor = (post: Element): string => {
   // Use the same selector as post-identifier.ts for consistency
   const authorElement = post.querySelector('a[href*="/user/"]');
-  const authorText = authorElement?.textContent?.trim() || "u/unknown-user";
+  const authorText = authorElement?.textContent?.trim();
 
   // Remove "u/" prefix if present
-  return authorText.startsWith("u/") ? authorText.slice(2) : authorText;
+  const author = authorText?.startsWith("u/")
+    ? authorText.slice(2)
+    : authorText;
+  if (author && author !== "unknown-user") {
+    return author;
+  }
+
+  // Posts on a user profile can omit the author link. Use the profile owner
+  // from the URL before falling back to an unknown username.
+  const profileMatch = window.location.pathname.match(
+    /^\/(?:user|u)\/([^/]+)(?:\/|$)/i,
+  );
+  if (profileMatch?.[1]) {
+    try {
+      return decodeURIComponent(profileMatch[1]);
+    } catch {
+      return profileMatch[1];
+    }
+  }
+
+  return "unknown-user";
 };
 
 /**

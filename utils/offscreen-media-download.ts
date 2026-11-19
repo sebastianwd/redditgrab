@@ -4,6 +4,12 @@ import {
   isBackgroundMessage,
 } from "@/types";
 import { OFFSCREEN_DOCUMENT_PATH } from "@/utils/constants";
+import {
+  hasMediaHash,
+  hasSimilarImageHash,
+  saveImagePerceptualHash,
+  saveMediaHash,
+} from "@/utils/media-hash";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -97,7 +103,8 @@ export async function handleOffscreenMessages(message: any) {
   try {
     switch (message.type) {
       case OFFSCREEN_KEYS.DOWNLOAD_VIDEO: {
-        const video = message.data as { url?: string; filename?: string; error?: string };
+        const video = message.data as { url?: string; filename?: string; error?: string; hash?: string; skipDuplicateMedia?: boolean; skipped?: boolean };
+        if (video?.skipped) break;
         if (!video?.url) {
           throw new Error(video?.error || "No video file produced");
         }
@@ -106,24 +113,37 @@ export async function handleOffscreenMessages(message: any) {
           filename: video.filename,
           saveAs: false,
         });
+        if (video.skipDuplicateMedia && video.hash) {
+          await saveMediaHash(video.hash);
+        }
         break;
       }
       case OFFSCREEN_KEYS.DOWNLOAD_IMAGE: {
         const items = message.data as
-          | { url: string; filename: string }[]
+          | { url: string; filename: string; hash?: string; perceptualHash?: string; skipDuplicateMedia?: boolean }[]
           | { error?: string };
         if (!Array.isArray(items)) {
           throw new Error(items?.error || "No image files produced");
         }
-        await Promise.all(
-          items.map((item) =>
-            browser.downloads.download({
-              url: item.url,
-              filename: item.filename,
-              saveAs: false,
-            })
-          )
-        );
+        for (const item of items) {
+          if (item.skipDuplicateMedia) {
+            if (
+              (item.perceptualHash && (await hasSimilarImageHash(item.perceptualHash))) ||
+              (item.hash && (await hasMediaHash(item.hash)))
+            ) continue;
+          }
+          await browser.downloads.download({
+            url: item.url,
+            filename: item.filename,
+            saveAs: false,
+          });
+          if (item.skipDuplicateMedia && item.hash) {
+            await saveMediaHash(item.hash);
+            if (item.perceptualHash) {
+              await saveImagePerceptualHash(item.perceptualHash);
+            }
+          }
+        }
         break;
       }
       default:

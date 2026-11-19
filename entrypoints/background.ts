@@ -1,5 +1,6 @@
 import { onMessage } from "webext-bridge/background";
 import { DownloadRequestMessage } from "@/types/shim";
+import { skipDuplicateMedia } from "@/utils/storage";
 
 export default defineBackground(() => {
   browser.runtime.onMessage.addListener(handleOffscreenMessages);
@@ -72,7 +73,9 @@ async function handleDownloadRequest(data: DownloadRequestMessage) {
       useGalleryFolders: data.useGalleryFolders,
       addTitleToImages: data.addTitleToImages,
       postTitle: data.postTitle,
+      postAuthor: data.postAuthor,
       filenamePattern: await filenamePattern.getValue(),
+      skipDuplicateMedia: await skipDuplicateMedia.getValue(),
     } as const satisfies Parameters<typeof downloadGalleryImages>[0];
 
     if (browser.offscreen) {
@@ -89,7 +92,9 @@ async function handleDownloadRequest(data: DownloadRequestMessage) {
       subredditName,
       addTitleToVideo: data.addTitleToVideos,
       postTitle: data.postTitle || "",
+      postAuthor: data.postAuthor,
       filenamePattern: await filenamePattern.getValue(),
+      skipDuplicateMedia: await skipDuplicateMedia.getValue(),
     } as const satisfies Parameters<typeof downloadVideo>[0];
 
     if (browser.offscreen) {

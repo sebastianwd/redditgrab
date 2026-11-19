@@ -41,6 +41,7 @@ export interface DownloadRequestMessage {
   addTitleToImages: boolean;
   addTitleToVideos: boolean;
   postTitle?: string;
+  postAuthor?: string;
 }
 
 export interface DownloadRequestResponse {

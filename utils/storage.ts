@@ -64,3 +64,8 @@ export const forceDownloadProcessed = storage.defineItem(
   "local:forceDownloadProcessed",
   { fallback: false },
 );
+
+export const skipDuplicateMedia = storage.defineItem(
+  "local:skipDuplicateMedia",
+  { fallback: true },
+);

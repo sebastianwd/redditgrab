@@ -11,6 +11,7 @@ import {
   markDownloadedAsVisited as markDownloadedAsVisitedStorage,
   showDownloadedMarkers as showDownloadedMarkersStorage,
   forceDownloadProcessed as forceDownloadProcessedStorage,
+  skipDuplicateMedia as skipDuplicateMediaStorage,
   useDateRange as useDateRangeStorage,
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
@@ -85,6 +86,10 @@ const debouncedSaveForceDownloadProcessed = debounce(async (value: boolean) => {
   await forceDownloadProcessedStorage.setValue(value);
 }, 500);
 
+const debouncedSaveSkipDuplicateMedia = debounce(async (value: boolean) => {
+  await skipDuplicateMediaStorage.setValue(value);
+}, 500);
+
 const debouncedSaveUseDateRange = debounce(async (value: boolean) => {
   await useDateRangeStorage.setValue(value);
 }, 500);
@@ -117,6 +122,7 @@ function SidebarApp() {
       markDownloadedAsVisited: false,
       showDownloadedMarkers: false,
       forceDownloadProcessed: false,
+      skipDuplicateMedia: true,
       useDateRange: false,
       dateRangeStart: undefined,
       dateRangeEnd: undefined,
@@ -143,6 +149,7 @@ function SidebarApp() {
         markDownloadedAsVisited,
         showDownloadedMarkers,
         forceDownloadProcessed,
+        skipDuplicateMedia,
         useDateRange,
         dateRangeStart,
         dateRangeEnd,
@@ -156,6 +163,7 @@ function SidebarApp() {
         markDownloadedAsVisitedStorage.getValue(),
         showDownloadedMarkersStorage.getValue(),
         forceDownloadProcessedStorage.getValue(),
+        skipDuplicateMediaStorage.getValue(),
         useDateRangeStorage.getValue(),
         dateRangeStartStorage.getValue(),
         dateRangeEndStorage.getValue(),
@@ -176,6 +184,7 @@ function SidebarApp() {
         markDownloadedAsVisited: markDownloadedAsVisited || false,
         showDownloadedMarkers: showDownloadedMarkers || false,
         forceDownloadProcessed: forceDownloadProcessed || false,
+        skipDuplicateMedia: skipDuplicateMedia ?? true,
         useDateRange: useDateRange || false,
         dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
         dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
@@ -223,6 +232,9 @@ function SidebarApp() {
             debouncedSaveForceDownloadProcessed(
               value.forceDownloadProcessed || false,
             );
+            break;
+          case "skipDuplicateMedia":
+            debouncedSaveSkipDuplicateMedia(value.skipDuplicateMedia ?? true);
             break;
           case "useDateRange":
             debouncedSaveUseDateRange(value.useDateRange || false);
@@ -490,6 +502,7 @@ function SidebarApp() {
                 addTitleToImages: form.getValues("addTitleToImages"),
                 addTitleToVideos: form.getValues("addTitleToVideos"),
                 postTitle: mediaItem.postTitle,
+                postAuthor: mediaItem.postAuthor,
               },
               "background",
             );
@@ -792,8 +805,8 @@ function SidebarApp() {
                   />
                 </FormControl>
                 <FormDescription>
-                  Available: {"{subreddit}"}, {"{timestamp}"}, {"{title}"},{" "}
-                  {"{filename}"}
+                  Available: {"{subreddit}"}, {"{timestamp}"}, {"{user}"},{" "}
+                  {"{title}"}, {"{filename}"}
                 </FormDescription>
                 <FormMessage />
               </FormItem>
@@ -938,6 +951,40 @@ function SidebarApp() {
                         <p className="text-xs">
                           Adds a green corner check to posts you've already
                           downloaded, on feeds and search results
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="skipDuplicateMedia"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <div className="space-y-1 leading-none flex items-center gap-1.5">
+                  <FormLabel>Skip duplicate images and videos</FormLabel>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="inline-flex text-gray-500 dark:text-gray-400 cursor-help">
+                          <Icon icon="lucide:info" className="size-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p className="text-xs">
+                          Uses visual similarity matching for photos and exact
+                          content hashes for videos to skip media already saved
+                          by RedditGrab.
                         </p>
                       </TooltipContent>
                     </Tooltip>

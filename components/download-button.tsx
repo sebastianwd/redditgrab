@@ -13,7 +13,11 @@ import { markPostAsVisited } from "@/utils/mark-visited";
 import { sendMessage } from "webext-bridge/content-script";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@iconify/react";
-import { getPostTitle, processFolderDestination } from "@/utils/post-utils";
+import {
+  getPostAuthor,
+  getPostTitle,
+  processFolderDestination,
+} from "@/utils/post-utils";
 
 const DownloadButton = ({
   mediaContainer,
@@ -50,6 +54,7 @@ const DownloadButton = ({
       );
       // Get post title if needed
       const postTitle = postElement ? getPostTitle(postElement) : undefined;
+      const postAuthor = postElement ? getPostAuthor(postElement) : undefined;
 
       const finalFolderDestination = processFolderDestination(
         latestFolderConfig,
@@ -73,6 +78,7 @@ const DownloadButton = ({
           addTitleToImages,
           addTitleToVideos,
           postTitle,
+          postAuthor,
         },
         "background",
       );

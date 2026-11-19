@@ -8,8 +8,10 @@ export type DownloadVideoOptions = {
   subredditName: string;
   addTitleToVideo: boolean;
   postTitle: string;
+  postAuthor?: string;
   filenamePattern: string;
   offscreen?: boolean;
+  skipDuplicateMedia?: boolean;
 };
 
 export type DownloadImageOptions = {
@@ -19,8 +21,10 @@ export type DownloadImageOptions = {
   useGalleryFolders?: boolean;
   addTitleToImages?: boolean;
   postTitle?: string;
+  postAuthor?: string;
   filenamePattern: string;
   offscreen?: boolean;
+  skipDuplicateMedia?: boolean;
 };
 
 export interface BaseMessage {
@@ -48,6 +52,10 @@ export interface DownloadVideoResponseMessage extends BaseMessage {
   data: {
     url: string;
     filename: string;
+    hash?: string;
+    perceptualHash?: string;
+    skipDuplicateMedia?: boolean;
+    skipped?: boolean;
   };
 }
 
@@ -56,6 +64,10 @@ export interface DownloadImageResponseMessage extends BaseMessage {
   data: {
     url: string;
     filename: string;
+    hash?: string;
+    perceptualHash?: string;
+    skipDuplicateMedia?: boolean;
+    skipped?: boolean;
   }[];
 }
 
