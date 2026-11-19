@@ -31,6 +31,14 @@ export interface ScrollToLoadMoreResponse {
   success: boolean;
 }
 
+export interface RateLimitDelayResponse {
+  delaySeconds?: number;
+}
+
+export interface CloseRateLimitBannerResponse {
+  closed: boolean;
+}
+
 export interface DownloadRequestMessage {
   timestamp: number;
   mediaContentType: MediaContentType;
@@ -69,6 +77,11 @@ declare module "webext-bridge" {
     SCROLL_TO_LOAD_MORE: ProtocolWithReturn<
       { scrollUp?: boolean },
       ScrollToLoadMoreResponse
+    >;
+    GET_RATE_LIMIT_DELAY: ProtocolWithReturn<void, RateLimitDelayResponse>;
+    CLOSE_RATE_LIMIT_BANNER: ProtocolWithReturn<
+      void,
+      CloseRateLimitBannerResponse
     >;
     DOWNLOAD_REQUEST: ProtocolWithReturn<
       DownloadRequestMessage,

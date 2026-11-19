@@ -363,9 +363,63 @@ function SidebarApp() {
       failedPostIdsRef.current = new Set();
       handledThisRunRef.current = new Set();
 
+      const waitWithProgress = (totalMs: number) =>
+        new Promise<boolean>((resolve) => {
+          const startedAt = Date.now();
+          setDelayProgress({ totalMs, elapsedMs: 0 });
+          const timer = window.setInterval(() => {
+            if (!shouldContinueProcessingRef.current) {
+              window.clearInterval(timer);
+              setDelayProgress(null);
+              resolve(false);
+              return;
+            }
+            const elapsedMs = Math.min(Date.now() - startedAt, totalMs);
+            setDelayProgress({ totalMs, elapsedMs });
+            if (elapsedMs >= totalMs) {
+              window.clearInterval(timer);
+              setDelayProgress(null);
+              resolve(true);
+            }
+          }, 250);
+        });
+
+      const waitForRateLimit = async () => {
+        try {
+          const result = await sendMessage(
+            "GET_RATE_LIMIT_DELAY",
+            undefined,
+            `content-script@${tab.id}`,
+          );
+          if (!result.delaySeconds || result.delaySeconds <= 0) return true;
+          const totalSeconds = result.delaySeconds + 10;
+          logger.warn(`Reddit rate limit detected; pausing for ${totalSeconds}s`);
+          const canResume = await waitWithProgress(totalSeconds * 1000);
+          if (!canResume) return false;
+          const closeResult = await sendMessage(
+            "CLOSE_RATE_LIMIT_BANNER",
+            undefined,
+            `content-script@${tab.id}`,
+          );
+          logger.log(
+            closeResult.closed
+              ? "Closed Reddit rate-limit banner after waiting"
+              : "Reddit rate-limit banner close button was not found",
+          );
+          return true;
+        } catch (error) {
+          logger.warn("Could not check Reddit rate-limit banner", error);
+          return true;
+        }
+      };
+
       logger.log("Starting mass scraping from sidebar");
 
       const processPage = async () => {
+        if (!(await waitForRateLimit())) {
+          stopScraping();
+          return;
+        }
         let scanPayload: {
           scrollUp?: boolean;
           anchorPostId?: string;
@@ -462,6 +516,8 @@ function SidebarApp() {
             break;
           }
 
+          if (!(await waitForRateLimit())) break;
+
           try {
             // Calculate folder destination with variable substitution
             const currentFolderDestination =
@@ -557,20 +613,7 @@ function SidebarApp() {
           if (i < filteredMediaUrls.length - 1) {
             const delaySeconds = form.getValues("downloadDelaySeconds");
             if (form.getValues("enableDownloadDelay") && delaySeconds > 0) {
-              const totalMs = delaySeconds * 1000;
-              const startedAt = Date.now();
-              setDelayProgress({ totalMs, elapsedMs: 0 });
-              await new Promise<void>((resolve) => {
-                const timer = window.setInterval(() => {
-                  const elapsedMs = Math.min(Date.now() - startedAt, totalMs);
-                  setDelayProgress({ totalMs, elapsedMs });
-                  if (elapsedMs >= totalMs) {
-                    window.clearInterval(timer);
-                    resolve();
-                  }
-                }, 100);
-              });
-              setDelayProgress(null);
+              await waitWithProgress(delaySeconds * 1000);
             }
           }
         }
