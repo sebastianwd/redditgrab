@@ -15,6 +15,8 @@ import {
   dateRangeStart as dateRangeStartStorage,
   dateRangeEnd as dateRangeEndStorage,
   darkMode as darkModeStorage,
+  downloadDelaySeconds as downloadDelaySecondsStorage,
+  enableDownloadDelay as enableDownloadDelayStorage,
 } from "@/utils/storage";
 import { debounce } from "es-toolkit";
 import { sendMessage } from "webext-bridge/popup";
@@ -49,6 +51,7 @@ import {
   type MassDownloadMediaFilterValue,
 } from "@/components/mass-download-media-filter";
 import { processFolderDestination } from "@/utils/post-utils";
+import { Input } from "@/components/ui/input";
 
 const debouncedSaveFolder = debounce(async (value: string) => {
   await folderDestinationStorage.setValue(value);
@@ -117,6 +120,8 @@ function SidebarApp() {
       markDownloadedAsVisited: false,
       showDownloadedMarkers: false,
       forceDownloadProcessed: false,
+      enableDownloadDelay: true,
+      downloadDelaySeconds: 1,
       useDateRange: false,
       dateRangeStart: undefined,
       dateRangeEnd: undefined,
@@ -130,6 +135,10 @@ function SidebarApp() {
   const [massDownloadScrollUp, setMassDownloadScrollUp] = useState(false);
   const [massDownloadMediaFilter, setMassDownloadMediaFilter] =
     useState<MassDownloadMediaFilterValue>("all");
+  const [delayProgress, setDelayProgress] = useState<{
+    totalMs: number;
+    elapsedMs: number;
+  } | null>(null);
 
   // Load values from storage into form
   useEffect(() => {
@@ -147,6 +156,8 @@ function SidebarApp() {
         dateRangeStart,
         dateRangeEnd,
         darkMode,
+        downloadDelaySeconds,
+        enableDownloadDelay,
       ] = await Promise.all([
         folderDestinationStorage.getValue(),
         filenamePatternStorage.getValue(),
@@ -160,6 +171,8 @@ function SidebarApp() {
         dateRangeStartStorage.getValue(),
         dateRangeEndStorage.getValue(),
         darkModeStorage.getValue(),
+        downloadDelaySecondsStorage.getValue(),
+        enableDownloadDelayStorage.getValue(),
       ]);
 
       console.log("dateRangeStart", dateRangeStart);
@@ -176,6 +189,8 @@ function SidebarApp() {
         markDownloadedAsVisited: markDownloadedAsVisited || false,
         showDownloadedMarkers: showDownloadedMarkers || false,
         forceDownloadProcessed: forceDownloadProcessed || false,
+        downloadDelaySeconds,
+        enableDownloadDelay,
         useDateRange: useDateRange || false,
         dateRangeStart: dateRangeStart ? parseInt(dateRangeStart) : undefined,
         dateRangeEnd: dateRangeEnd ? parseInt(dateRangeEnd) : undefined,
@@ -222,6 +237,16 @@ function SidebarApp() {
           case "forceDownloadProcessed":
             debouncedSaveForceDownloadProcessed(
               value.forceDownloadProcessed || false,
+            );
+            break;
+          case "downloadDelaySeconds":
+            void downloadDelaySecondsStorage.setValue(
+              value.downloadDelaySeconds ?? 1,
+            );
+            break;
+          case "enableDownloadDelay":
+            void enableDownloadDelayStorage.setValue(
+              value.enableDownloadDelay ?? true,
             );
             break;
           case "useDateRange":
@@ -338,9 +363,63 @@ function SidebarApp() {
       failedPostIdsRef.current = new Set();
       handledThisRunRef.current = new Set();
 
+      const waitWithProgress = (totalMs: number) =>
+        new Promise<boolean>((resolve) => {
+          const startedAt = Date.now();
+          setDelayProgress({ totalMs, elapsedMs: 0 });
+          const timer = window.setInterval(() => {
+            if (!shouldContinueProcessingRef.current) {
+              window.clearInterval(timer);
+              setDelayProgress(null);
+              resolve(false);
+              return;
+            }
+            const elapsedMs = Math.min(Date.now() - startedAt, totalMs);
+            setDelayProgress({ totalMs, elapsedMs });
+            if (elapsedMs >= totalMs) {
+              window.clearInterval(timer);
+              setDelayProgress(null);
+              resolve(true);
+            }
+          }, 250);
+        });
+
+      const waitForRateLimit = async () => {
+        try {
+          const result = await sendMessage(
+            "GET_RATE_LIMIT_DELAY",
+            undefined,
+            `content-script@${tab.id}`,
+          );
+          if (!result.delaySeconds || result.delaySeconds <= 0) return true;
+          const totalSeconds = result.delaySeconds + 10;
+          logger.warn(`Reddit rate limit detected; pausing for ${totalSeconds}s`);
+          const canResume = await waitWithProgress(totalSeconds * 1000);
+          if (!canResume) return false;
+          const closeResult = await sendMessage(
+            "CLOSE_RATE_LIMIT_BANNER",
+            undefined,
+            `content-script@${tab.id}`,
+          );
+          logger.log(
+            closeResult.closed
+              ? "Closed Reddit rate-limit banner after waiting"
+              : "Reddit rate-limit banner close button was not found",
+          );
+          return true;
+        } catch (error) {
+          logger.warn("Could not check Reddit rate-limit banner", error);
+          return true;
+        }
+      };
+
       logger.log("Starting mass scraping from sidebar");
 
       const processPage = async () => {
+        if (!(await waitForRateLimit())) {
+          stopScraping();
+          return;
+        }
         let scanPayload: {
           scrollUp?: boolean;
           anchorPostId?: string;
@@ -437,6 +516,8 @@ function SidebarApp() {
             break;
           }
 
+          if (!(await waitForRateLimit())) break;
+
           try {
             // Calculate folder destination with variable substitution
             const currentFolderDestination =
@@ -523,13 +604,17 @@ function SidebarApp() {
               failedPostIdsRef.current.add(mediaItem.mediaPostId);
             }
 
-            // Small delay between downloads to avoid overwhelming the system
-            if (i < filteredMediaUrls.length - 1) {
-              await new Promise((resolve) => setTimeout(resolve, 1000));
-            }
           } catch (error) {
             console.error(`Failed to download item ${i + 1}:`, error);
             failedPostIdsRef.current.add(mediaItem.mediaPostId);
+          }
+
+          // Keep a configurable pause between posts, including after failures.
+          if (i < filteredMediaUrls.length - 1) {
+            const delaySeconds = form.getValues("downloadDelaySeconds");
+            if (form.getValues("enableDownloadDelay") && delaySeconds > 0) {
+              await waitWithProgress(delaySeconds * 1000);
+            }
           }
         }
 
@@ -984,6 +1069,55 @@ function SidebarApp() {
 
           <FormField
             control={form.control}
+            name="enableDownloadDelay"
+            render={({ field }) => (
+              <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                <FormControl>
+                  <Checkbox
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormLabel>Delay between downloads</FormLabel>
+              </FormItem>
+            )}
+          />
+
+          {form.watch("enableDownloadDelay") && (
+            <div className="ml-6 space-y-3 border-l-2 border-gray-200 pl-4">
+              <FormField
+                control={form.control}
+                name="downloadDelaySeconds"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Delay (seconds)</FormLabel>
+                    <FormControl>
+                      <Input
+                        aria-label="Delay between downloads in seconds"
+                        className="w-16"
+                        type="number"
+                        min={0}
+                        max={60}
+                        step={0.5}
+                        value={field.value}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          field.onChange(value === "" ? 0 : Number(value));
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Wait between posts during mass downloads (0–60 seconds).
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          )}
+
+          <FormField
+            control={form.control}
             name="useDateRange"
             render={({ field }) => (
               <FormItem className="flex flex-row items-start space-x-3 space-y-0">
@@ -1161,6 +1295,37 @@ function SidebarApp() {
                   {scrapingStatus.currentPostInfo.type} from r/
                   {scrapingStatus.currentPostInfo.subreddit}
                 </p>
+              </div>
+            )}
+            {delayProgress && (
+              <div className="mt-3">
+                <div className="mb-1 flex justify-between text-xs text-blue-700 dark:text-blue-300">
+                  <span>Waiting before next download</span>
+                  <span>
+                    {Math.max(
+                      0,
+                      (delayProgress.totalMs - delayProgress.elapsedMs) / 1000,
+                    ).toFixed(1)}
+                    s
+                  </span>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label="Download delay progress"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(
+                    (delayProgress.elapsedMs / delayProgress.totalMs) * 100,
+                  )}
+                  className="h-2 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-950"
+                >
+                  <div
+                    className="h-full rounded-full bg-blue-600"
+                    style={{
+                      width: `${(delayProgress.elapsedMs / delayProgress.totalMs) * 100}%`,
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>

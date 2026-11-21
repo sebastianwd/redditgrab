@@ -394,6 +394,7 @@ export default defineContentScript({
   matches: ["*://*.reddit.com/*"],
   cssInjectionMode: "ui",
   async main(ctx) {
+    let acknowledgedRateLimitBanner = "";
     const mountedUIs = new Set();
 
     const getMediaContainer = (
@@ -541,6 +542,30 @@ export default defineContentScript({
       }
 
       return { success: false };
+    });
+
+    onMessage("GET_RATE_LIMIT_DELAY", async () => {
+      const banner = document.querySelector<HTMLElement>(".banner.error");
+      const message = banner?.innerText?.replace(/\s+/g, " ").trim() || "";
+      if (!/your request has been rate limited/i.test(message)) {
+        acknowledgedRateLimitBanner = "";
+        return {};
+      }
+      if (message === acknowledgedRateLimitBanner) return {};
+      acknowledgedRateLimitBanner = message;
+      const seconds = message.match(/please take a break for\s+(\d+)\s+seconds?/i);
+      return seconds ? { delaySeconds: Number(seconds[1]) } : {};
+    });
+
+    onMessage("CLOSE_RATE_LIMIT_BANNER", async () => {
+      const banner = document.querySelector<HTMLElement>(".banner.error");
+      const closeButton = banner?.querySelector<HTMLButtonElement>(
+        '[slot="closeButton"] > button, button[slot="closeButton"], [slot="closeButton"] button',
+      );
+      if (!closeButton || closeButton.disabled) return { closed: false };
+      closeButton.click();
+      acknowledgedRateLimitBanner = "";
+      return { closed: true };
     });
 
     onMessage("MARK_POST_VISITED", async ({ data }) => {

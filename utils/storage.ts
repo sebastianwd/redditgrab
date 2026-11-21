@@ -64,3 +64,13 @@ export const forceDownloadProcessed = storage.defineItem(
   "local:forceDownloadProcessed",
   { fallback: false },
 );
+
+export const downloadDelaySeconds = storage.defineItem(
+  "local:downloadDelaySeconds",
+  { fallback: 1 },
+);
+
+export const enableDownloadDelay = storage.defineItem(
+  "local:enableDownloadDelay",
+  { fallback: true },
+);
